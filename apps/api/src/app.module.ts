@@ -18,6 +18,7 @@ import { KasaModule } from "./kasa/kasa.module.js"
 import { MukellefModule } from "./mukellef/mukellef.module.js"
 import { PersonelModule } from "./personel/personel.module.js"
 import { StorageModule } from "./storage/storage.module.js"
+import { TakvimModule } from "./takvim/takvim.module.js"
 
 /** Loglarda asla görünmemesi gerekenler (gövde zaten loglanmaz; başlıklar ve hata nesneleri için) */
 const REDAKSIYON = [
@@ -75,6 +76,7 @@ export class AppModule {
         BuroModule,
         MukellefModule,
         KasaModule,
+        TakvimModule,
         DosyaModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),
