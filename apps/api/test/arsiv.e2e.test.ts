@@ -49,7 +49,7 @@ describe("arşiv", () => {
   })
 
   const sorgu = (p: Record<string, unknown>) =>
-    new URLSearchParams(Object.entries(p).map(([k, v]) => [k, String(v)])).toString()
+    new URLSearchParams(Object.entries(p).map(([k, v]): [string, string] => [k, String(v)])).toString()
   const sayfali = async (p: Record<string, unknown> = {}) =>
     (await ben.get(`/arsiv?${sorgu(p)}`)).json<ArsivListResponse>()
   const liste = async (p: Record<string, unknown> = {}) => (await sayfali(p)).items

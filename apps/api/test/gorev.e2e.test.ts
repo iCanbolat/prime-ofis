@@ -14,7 +14,6 @@ import type {
 
 import { aktivite, bildirim, gorev, takvimDurum } from "../src/db/schema/index.js"
 import { GorevMaddesiService } from "../src/gorev/gorev-maddesi.service.js"
-import { GorevService } from "../src/gorev/gorev.service.js"
 import { testUygulamasi, type Istemci, type TestUygulamasi } from "./harness.js"
 
 const [YONETICI, MEHMET, ZEYNEP] = PERSONEL.map((p) => p.id) as [string, string, string]
@@ -99,39 +98,30 @@ describe("görev", () => {
       })
     })
 
-    it("detay: takvimdeki beyan durumu; talep modülü yokken bağlı talepler boş", async () => {
+    it("detay: takvimdeki beyan durumu ve bağlı evrak talepleri (talep modülünden)", async () => {
       const banka = (await ben.get("/gorevler/o_banka")).json<GorevDetay>()
-      expect(banka.bagliTalepler).toEqual([])
+      expect(banka.bagliTalepler).toEqual([
+        {
+          id: "e_aktif",
+          durum: "AKTIF",
+          istenenler: ["FIS_FATURA", "BANKA_EKSTRESI"],
+          donem: "2026-08",
+          olusturmaTarihi: expect.any(String),
+        },
+      ])
       expect(banka.beyanDurumu).toBeUndefined()
       const kdv = (await ben.get("/gorevler/o_kdv_ltd")).json<GorevDetay>()
       expect(kdv.beyanDurumu).toBe("BEKLIYOR")
       expect((await ben.get("/gorevler/o_yok")).statusCode).toBe(404)
     })
 
-    it("bağlı talepler kayıtlı talep kaynağından gelir", async () => {
-      t.app.get(GorevService).talepKaynagiAyarla({
-        ozetler: async (ids) =>
-          ids.map((id) => ({
-            id,
-            durum: "AKTIF",
-            istenenler: [],
-            olusturmaTarihi: "2026-09-01T00:00:00.000Z",
-          })),
-        mukellefleri: async (ids) =>
-          new Map(ids.map((id) => [id, id === "e_ltd" ? "m_ltd" : "m_as"])),
-      })
-      try {
-        const banka = (await ben.get("/gorevler/o_banka")).json<GorevDetay>()
-        expect(banka.bagliTalepler).toMatchObject([{ id: "e_aktif", durum: "AKTIF" }])
-        expect(
-          (await ben.patch("/gorevler/o_banka", { bagliTalepIdler: ["e_ltd", "e_ltd"] })).json()
-        ).toMatchObject({ bagliTalepIdler: ["e_ltd"] })
-        expect(
-          (await ben.patch("/gorevler/o_banka", { bagliTalepIdler: ["e_as"] })).statusCode
-        ).toBe(400)
-      } finally {
-        t.app.get(GorevService).talepKaynagiAyarla(null as never)
-      }
+    it("bağlanan talepler tekilleştirilir; bilinmeyen talep 400", async () => {
+      expect(
+        (await ben.patch("/gorevler/o_banka", { bagliTalepIdler: ["e_aktif", "e_aktif"] })).json()
+      ).toMatchObject({ bagliTalepIdler: ["e_aktif"] })
+      expect(
+        (await ben.patch("/gorevler/o_banka", { bagliTalepIdler: ["e_yok"] })).statusCode
+      ).toBe(400)
     })
   })
 

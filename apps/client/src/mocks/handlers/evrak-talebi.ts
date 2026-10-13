@@ -1,4 +1,3 @@
-import { addDays } from "date-fns"
 import { HttpResponse, http } from "msw"
 
 import { GECERLILIK_GEREKEN, KATEGORI_SIRASI } from "@prime/shared/arsiv/kurallar"
@@ -9,7 +8,12 @@ import {
   bordroUygulanirMi,
 } from "@prime/shared/bordro/kurallar"
 import { BORDRO_MADDE_GIRDI } from "@prime/shared/bordro/sabitler"
-import { talepDurumu } from "@prime/shared/evrak-talebi/durum"
+import {
+  TALEP_MAKS_GUN as MAKS_GUN,
+  sonKullanmaHesapla,
+  talepDurumu,
+  yenidenAcSonKullanma,
+} from "@prime/shared/evrak-talebi/durum"
 import {
   ISTENEN_EVRAKLAR,
   ISTENEN_SIRASI,
@@ -56,15 +60,6 @@ import type {
 const KANALLAR: TalepKanal[] = ["WHATSAPP", "EPOSTA", "LINK"]
 const DONEM_RE = /^\d{4}-(0[1-9]|1[0-2])$/
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
-const MAKS_GUN = 60
-
-/** Son kullanma: bugünden `gun` gün sonra, gün sonu (yerel 23:59:59) */
-export function sonKullanmaHesapla(gun: number, baslangic: Date = new Date()) {
-  const tarih = addDays(baslangic, gun)
-  tarih.setHours(23, 59, 59, 0)
-  return tarih.toISOString()
-}
-
 export function talepView(t: EvrakTalebi): TalepView {
   const m = db.mukellef.find(t.mukellefId)
   const p = db.personel.find(t.olusturanId)
@@ -455,10 +450,9 @@ export const evrakTalebiHandlers = [
 
 /** Talebi müşterinin tekrar yükleyebileceği hale getirir: aktif + en az 7 gün süre. */
 function yenidenAcPatch(t: EvrakTalebi): Partial<EvrakTalebi> {
-  const enAz = sonKullanmaHesapla(7)
   return {
     durum: "AKTIF",
     tamamlanmaTarihi: undefined,
-    sonKullanma: t.sonKullanma > enAz ? t.sonKullanma : enAz,
+    sonKullanma: yenidenAcSonKullanma(t),
   }
 }
