@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
+demo-client
+.claude
+.git
+# Gizli değerler hiçbir klasörden imaja girmez
+**/.env
+**/.env.*
+!**/.env.example

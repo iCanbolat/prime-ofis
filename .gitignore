@@ -1,0 +1,23 @@
+# Bağımsız demo reposu (origin: iCanbolat/prime-client) — kendi .git'i var
+demo-client/
+# Plan dokümanları yerel
+.claude
+
+node_modules
+dist
+dist-ssr
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
+*.log
+*.local
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
