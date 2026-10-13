@@ -2,8 +2,15 @@ import { describe, expect, it } from "vitest"
 
 import { http } from "@/lib/http"
 import { db } from "@/mocks/db"
-import { DEMO_GIRIS_SIFRESI } from "@prime/mock-data/factories/personel"
-import type { LoginResponse, MukellefListResponse } from "@prime/shared/types/api"
+import { useAuthStore } from "@/features/auth/store"
+import {
+  DEMO_GIRIS_SIFRESI,
+  PERSONEL,
+} from "@prime/mock-data/factories/personel"
+import type {
+  LoginResponse,
+  MukellefListResponse,
+} from "@prime/shared/types/api"
 
 describe("GET /api/mukellefler", () => {
   const list = (params = {}) =>
@@ -62,9 +69,11 @@ describe("GET /api/mukellefler/:id", () => {
 })
 
 describe("auth", () => {
+  const eposta = (id: string) => PERSONEL.find((p) => p.id === id)!.eposta
+
   it("login personeli döner ve GIRIS aktivitesi yazar", async () => {
     const { personel } = await http.post<LoginResponse>("/auth/login", {
-      personelId: "p_3",
+      eposta: eposta("p_3").toUpperCase(),
       sifre: DEMO_GIRIS_SIFRESI,
     })
     expect(personel.ad).toBe("Zeynep")
@@ -76,21 +85,30 @@ describe("auth", () => {
   it("bilinmeyen kullanıcı / hatalı şifre 401, pasif kullanıcı 403", async () => {
     const sifre = DEMO_GIRIS_SIFRESI
     await expect(
-      http.post("/auth/login", { personelId: "p_99", sifre })
+      http.post("/auth/login", { eposta: "yok@primemusavirlik.com.tr", sifre })
     ).rejects.toMatchObject({ status: 401 })
     await expect(
-      http.post("/auth/login", { personelId: "p_3", sifre: "yanlis-sifre" })
+      http.post("/auth/login", { eposta: eposta("p_3"), sifre: "yanlis-sifre" })
     ).rejects.toMatchObject({ status: 401 })
     expect(db.aktivite.count((a) => a.eylem === "GIRIS")).toBe(0)
     db.personel.update("p_4", { aktif: false })
     await expect(
-      http.post("/auth/login", { personelId: "p_4", sifre })
+      http.post("/auth/login", { eposta: eposta("p_4"), sifre })
     ).rejects.toMatchObject({ status: 403 })
   })
 
   it("logout CIKIS aktivitesi yazar", async () => {
-    await http.post("/auth/logout", { personelId: "p_1" })
+    useAuthStore.setState({ user: PERSONEL[0]! })
+    await http.post("/auth/logout")
     expect(db.aktivite.where((a) => a.eylem === "CIKIS")).toHaveLength(1)
+  })
+
+  it("/auth/me oturumun personelini döner, oturum yoksa 401", async () => {
+    await expect(http.get("/auth/me")).rejects.toMatchObject({ status: 401 })
+    useAuthStore.setState({ user: PERSONEL[1]! })
+    await expect(http.get<LoginResponse>("/auth/me")).resolves.toEqual({
+      personel: PERSONEL[1],
+    })
   })
 })
 

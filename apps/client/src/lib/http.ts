@@ -1,11 +1,19 @@
 /**
- * Tip güvenli fetch sarmalayıcı. Tüm API çağrıları `/api` altına gider;
- * geliştirmede ve testte MSW tarafından karşılanır, backend geldiğinde aynı katman kullanılır.
+ * Tip güvenli fetch sarmalayıcı. Tüm API çağrıları `/api` altına gider: gerçek API'de oturum
+ * httpOnly cookie ile taşınır; mock modunda (`VITE_ENABLE_MOCKS`) ve testte MSW karşılar.
  */
 
 export const API_BASE = "/api"
 
-/** İşlemi yapan personelin id'si bu başlıkla gönderilir (aktivite kaydı için). */
+/** Mock API (MSW) mi kullanılıyor: tarayıcıda `VITE_ENABLE_MOCKS=true`, Vitest'te her zaman */
+export const MOCK_MODU =
+  import.meta.env.VITE_ENABLE_MOCKS === "true" ||
+  import.meta.env.MODE === "test"
+
+/**
+ * Mock API işlemi yapan personeli bu başlıktan çözer (cookie oturumu yok). Gerçek API bu başlığı
+ * yok sayar; aktör oturumdan gelir. Bu yüzden yalnızca mock modunda gönderilir.
+ */
 export const ACTOR_HEADER = "X-Actor-Id"
 
 let actorIdProvider: () => string | undefined = () => undefined
@@ -13,6 +21,16 @@ let actorIdProvider: () => string | undefined = () => undefined
 /** Oturum katmanı (features/auth) kendini kaydeder; lib katmanı feature'a bağımlı olmaz. */
 export function setActorIdProvider(provider: () => string | undefined) {
   actorIdProvider = provider
+}
+
+let yetkisizIsleyici: (() => void) | null = null
+
+/**
+ * Oturum düştüğünde (401) çağrılır: oturum katmanı yerel kullanıcıyı temizler, korumalı
+ * sayfa giriş ekranına yönlendirir. Giriş isteğinin 401'i (hatalı şifre) hariç.
+ */
+export function setYetkisizIsleyici(isleyici: (() => void) | null) {
+  yetkisizIsleyici = isleyici
 }
 
 export class ApiError extends Error {
@@ -58,13 +76,16 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers["Content-Type"] = "application/json"
-  const actorId = actorIdProvider()
-  if (actorId) headers[ACTOR_HEADER] = actorId
+  if (MOCK_MODU) {
+    const actorId = actorIdProvider()
+    if (actorId) headers[ACTOR_HEADER] = actorId
+  }
 
   const response = await fetch(buildUrl(path, params), {
     method,
     signal,
     headers,
+    credentials: "same-origin",
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 
@@ -72,6 +93,7 @@ async function request<T>(
   const data: unknown = text ? JSON.parse(text) : undefined
 
   if (!response.ok) {
+    if (response.status === 401 && path !== "/auth/login") yetkisizIsleyici?.()
     const message =
       data &&
       typeof data === "object" &&

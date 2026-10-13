@@ -12,3 +12,9 @@ ignoredBuiltDependencies:
   - cpu-features
   - ssh2
   - protobufjs
+# @fastify/cookie tipleri `declare module "fastify"` ile genişletir ama fastify'ı bağımlılık
+# olarak bildirmez; peer olarak eklenmezse genişletme api'nin fastify kopyasına ulaşmaz
+packageExtensions:
+  "@fastify/cookie":
+    peerDependencies:
+      fastify: "^5.0.0"

@@ -1,6 +1,6 @@
 /**
  * Nesne deposu soyutlaması. Üretimde MinIO (S3 API), testte bellek içi.
- * Anahtar düzeni Faz 1'de: `arsiv/{mukellefId}/{dosyaId}`, `gelen/{talepId}/{gelenId}`.
+ * Anahtar düzeni `dosya/dosya.service.ts` içinde (`arsivAnahtari`, `gelenAnahtari`).
  */
 export abstract class DosyaDeposu {
   abstract koy(anahtar: string, icerik: Buffer, mimeType: string): Promise<void>
@@ -8,6 +8,8 @@ export abstract class DosyaDeposu {
   abstract getir(anahtar: string): Promise<Buffer | null>
   abstract sil(anahtar: string): Promise<void>
   abstract kopyala(kaynak: string, hedef: string): Promise<void>
+  /** Tüm nesneleri siler (yalnızca dev reset) */
+  abstract temizle(): Promise<void>
   /** Sağlık kontrolü: depo erişilebilir mi */
   abstract ping(): Promise<void>
 }
@@ -28,6 +30,9 @@ export class BellekDosyaDeposu extends DosyaDeposu {
     const n = this.nesneler.get(kaynak)
     if (!n) throw new Error(`Nesne yok: ${kaynak}`)
     this.nesneler.set(hedef, { ...n })
+  }
+  async temizle() {
+    this.nesneler.clear()
   }
   async ping() {}
 }

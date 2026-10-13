@@ -2,13 +2,17 @@ import "reflect-metadata"
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify"
 import { Test } from "@nestjs/testing"
-import { sql } from "drizzle-orm"
 import { inject } from "vitest"
+
+import { DEMO_GIRIS_SIFRESI, PERSONEL } from "@prime/mock-data/factories/personel"
+import { createFixtureState } from "@prime/mock-data/fixtures"
 
 import { fastifyAdapter, uygulamayiYapilandir } from "../src/app.factory.js"
 import { AppModule } from "../src/app.module.js"
 import { Saat } from "../src/core/saat.js"
+import { tablolariBosalt } from "../src/db/bosalt.js"
 import { DB, type Veritabani } from "../src/db/db.module.js"
+import { SeedYukleyici } from "../src/dev/seed-yukleyici.js"
 import { BellekDosyaDeposu, DosyaDeposu } from "../src/storage/dosya-deposu.js"
 
 export interface TestUygulamasi {
@@ -19,6 +23,19 @@ export interface TestUygulamasi {
   /** `app.inject` kısayolu — gerçek HTTP olmadan Fastify üzerinden istek */
   istek: NestFastifyApplication["inject"]
   kapat: () => Promise<void>
+  /** Tabloları boşaltır ve mock-data fixture'larını yükler (client testleriyle aynı veri) */
+  fixtureYukle: () => Promise<void>
+  /** Giriş yapar, `cookie` başlık değerini döner (personel id'si ya da e-posta) */
+  girisYap: (kim: string, sifre?: string) => Promise<string>
+  /** Oturumlu (cookie verilirse) kısa istek yardımcıları; yol `/api` olmadan */
+  istemci: (cookie?: string) => Istemci
+}
+
+type Yanit = Awaited<ReturnType<NestFastifyApplication["inject"]>>
+export interface Istemci {
+  get: (yol: string) => Promise<Yanit>
+  post: (yol: string, govde?: unknown) => Promise<Yanit>
+  put: (yol: string, govde?: unknown) => Promise<Yanit>
 }
 
 /**
@@ -55,22 +72,47 @@ export async function testUygulamasi(
   await app.init()
   await app.getHttpAdapter().getInstance().ready()
 
+  const db = app.get<Veritabani>(DB)
+  const istek = app.inject.bind(app)
+
+  const istemci = (cookie?: string): Istemci => {
+    const yap = (method: "GET" | "POST" | "PUT", yol: string, govde?: unknown) =>
+      istek({
+        method,
+        url: `/api${yol}`,
+        headers: cookie ? { cookie } : {},
+        ...(govde !== undefined ? { payload: govde as object } : {}),
+      })
+    return {
+      get: (yol) => yap("GET", yol),
+      post: (yol, govde) => yap("POST", yol, govde),
+      put: (yol, govde) => yap("PUT", yol, govde),
+    }
+  }
+
   return {
     app,
-    db: app.get<Veritabani>(DB),
+    db,
     depo,
     saat: app.get(Saat),
-    istek: app.inject.bind(app),
+    istek,
     kapat: () => app.close(),
+    fixtureYukle: async () => {
+      await tablolariBosalt(db)
+      depo.nesneler.clear()
+      await app.get(SeedYukleyici).yukle(createFixtureState())
+    },
+    girisYap: async (kim, sifre = DEMO_GIRIS_SIFRESI) => {
+      const eposta = PERSONEL.find((p) => p.id === kim)?.eposta ?? kim
+      const yanit = await istemci().post("/auth/login", { eposta, sifre })
+      if (yanit.statusCode !== 200) {
+        throw new Error(`Giriş başarısız (${yanit.statusCode}): ${yanit.body}`)
+      }
+      const c = yanit.cookies.find((c) => c.name === "sid")
+      return `sid=${c!.value}`
+    },
+    istemci,
   }
 }
 
-/** `public` şemasındaki tüm tabloları boşaltır (migration kayıtları `drizzle` şemasında kalır). */
-export async function tablolariBosalt(db: Veritabani) {
-  const { rows } = await db.execute<{ tablename: string }>(
-    sql`select tablename from pg_tables where schemaname = 'public'`
-  )
-  if (!rows.length) return
-  const liste = rows.map((r) => `"public"."${r.tablename}"`).join(", ")
-  await db.execute(sql.raw(`truncate table ${liste} restart identity cascade`))
-}
+export { tablolariBosalt }

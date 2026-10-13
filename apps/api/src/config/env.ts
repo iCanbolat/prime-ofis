@@ -33,9 +33,13 @@ export const envSchema = z
     S3_SECRET_KEY: z.string().min(1),
     S3_BUCKET: z.string().min(3).default("prime-ofis"),
 
-    /** Üçüncü taraf gizli değerlerini (SecretBox) şifreleyen anahtar — Faz 1'de kullanılmaya başlar */
+    /** Üçüncü taraf gizli değerlerini (SecretBox) şifreleyen anahtar */
     SECRET_KEY: anahtar32.optional(),
+    /** Rotasyon sırasında eski anahtar (`cli gizli:dondur` bitince kaldırılır) */
+    SECRET_KEY_ESKI: anahtar32.optional(),
     SESSION_TTL_SAAT: z.coerce.number().int().min(1).max(24 * 30).default(12),
+    /** IP + e-posta başına 15 dakikadaki hatalı giriş sınırı */
+    GIRIS_DENEME_SINIRI: z.coerce.number().int().min(1).default(5),
 
     /** Bu süreç pg-boss işlerini (cron + kuyruk) çalıştırır mı */
     JOB_WORKERS: bool.default(true),

@@ -1,12 +1,14 @@
 import { Controller, Get, HttpException, Inject } from "@nestjs/common"
 import { sql } from "drizzle-orm"
 
+import { Public } from "../auth/auth.decorators.js"
 import { DB, type Veritabani } from "../db/db.module.js"
 import { DosyaDeposu } from "../storage/dosya-deposu.js"
 
 type Durum = "ok" | "hata"
 
 /** `GET /api/health` — Docker healthcheck ve Caddy için. Bağımlılık hatasında 503. */
+@Public()
 @Controller("health")
 export class HealthController {
   constructor(

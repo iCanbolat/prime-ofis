@@ -2,8 +2,10 @@ import {
   CopyObjectCommand,
   CreateBucketCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
   S3Client,
@@ -86,6 +88,22 @@ export class S3DosyaDeposu extends DosyaDeposu implements OnModuleInit {
         CopySource: `${this.bucket}/${encodeURIComponent(kaynak)}`,
       })
     )
+  }
+
+  async temizle() {
+    let devam: string | undefined
+    do {
+      const sayfa = await this.client.send(
+        new ListObjectsV2Command({ Bucket: this.bucket, ContinuationToken: devam })
+      )
+      const nesneler = (sayfa.Contents ?? []).flatMap((n) => (n.Key ? [{ Key: n.Key }] : []))
+      if (nesneler.length) {
+        await this.client.send(
+          new DeleteObjectsCommand({ Bucket: this.bucket, Delete: { Objects: nesneler } })
+        )
+      }
+      devam = sayfa.IsTruncated ? sayfa.NextContinuationToken : undefined
+    } while (devam)
   }
 
   async ping() {

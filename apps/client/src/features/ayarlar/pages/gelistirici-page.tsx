@@ -24,7 +24,9 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { EmptyState } from "@/components/shared/query-states"
 import { useMockDbStats, useResetMockDb } from "@/features/ayarlar/queries"
+import { MOCK_MODU } from "@/lib/http"
 import {
   getMockErrorPattern,
   isMockDelayEnabled,
@@ -51,7 +53,11 @@ function MockDbCard() {
     reset.mutate(undefined, {
       onSuccess: () => {
         setConfirmOpen(false)
-        toast.success("Mock veritabanı seed verisine sıfırlandı")
+        toast.success(
+          MOCK_MODU
+            ? "Mock veritabanı seed verisine sıfırlandı"
+            : "Veritabanı seed verisine sıfırlandı; tekrar giriş yapın"
+        )
       },
       onError: (error) => toast.error(error.message),
     })
@@ -66,11 +72,12 @@ function MockDbCard() {
             strokeWidth={2}
             className="size-5"
           />
-          Mock veritabanı
+          {MOCK_MODU ? "Mock veritabanı" : "Geliştirme veritabanı"}
         </CardTitle>
         <CardDescription>
-          Veriler tarayıcıda (localStorage) tutulur. Sıfırlama tüm
-          değişiklikleri siler ve seed verisini yükler.
+          {MOCK_MODU
+            ? "Veriler tarayıcıda (localStorage) tutulur. Sıfırlama tüm değişiklikleri siler ve seed verisini yükler."
+            : "API veritabanı (DEV_ARACLARI açık). Sıfırlama tüm tabloları, dosyaları ve oturumları siler, seed verisini yükler."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -186,10 +193,20 @@ function MockBehaviourCard() {
 }
 
 export function GelistiriciPage() {
+  const stats = useMockDbStats()
+  if (!MOCK_MODU && stats.isError) {
+    return (
+      <EmptyState
+        icon={Database01Icon}
+        title="Geliştirici araçları kapalı"
+        description="API'de DEV_ARACLARI=true değil."
+      />
+    )
+  }
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <MockDbCard />
-      <MockBehaviourCard />
+      {MOCK_MODU && <MockBehaviourCard />}
     </div>
   )
 }

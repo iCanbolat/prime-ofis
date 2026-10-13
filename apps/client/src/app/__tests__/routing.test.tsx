@@ -10,17 +10,21 @@ import { TEST_USERS, renderRoute } from "@/test/render"
 describe("kimlik doğrulama yönlendirmeleri", () => {
   it("oturum yokken korumalı sayfa /login'e yönlendirir", async () => {
     const { router } = renderRoute("/mukellefler?tur=LTD")
-    expect(await screen.findByText("Giriş yap")).toBeInTheDocument()
+    expect(await screen.findByLabelText("E-posta")).toBeInTheDocument()
     expect(router.state.location.pathname).toBe("/login")
     expect(router.state.location.state).toEqual({
       from: "/mukellefler?tur=LTD",
     })
   })
 
-  it("kullanıcı seçilip şifre girilince giriş yapılır ve geldiği sayfaya döner", async () => {
+  it("e-posta ve şifre girilince giriş yapılır ve geldiği sayfaya döner", async () => {
     const { router, user } = renderRoute("/takvim")
-    await user.click(
-      await screen.findByRole("button", { name: /Zeynep Demir/ })
+    await user.click(await screen.findByRole("button", { name: "Giriş yap" }))
+    expect(screen.getByText("Geçerli bir e-posta girin")).toBeInTheDocument()
+
+    await user.type(
+      screen.getByLabelText("E-posta"),
+      "zeynep.demir@primemusavirlik.com.tr"
     )
     await user.type(screen.getByLabelText("Şifre"), "yanlis-sifre")
     await user.click(screen.getByRole("button", { name: "Giriş yap" }))
@@ -47,13 +51,28 @@ describe("kimlik doğrulama yönlendirmeleri", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/"))
   })
 
-  it("pasif kullanıcı login ekranında listelenmez", async () => {
+  it("pasif kullanıcı giriş yapamaz", async () => {
     db.personel.update("p_4", { aktif: false })
-    renderRoute("/login")
-    await screen.findByRole("button", { name: /Ayşe Yılmaz/ })
+    const { user } = renderRoute("/login")
+    await user.type(
+      await screen.findByLabelText("E-posta"),
+      "emre.sahin@primemusavirlik.com.tr"
+    )
+    await user.type(screen.getByLabelText("Şifre"), DEMO_GIRIS_SIFRESI)
+    await user.click(screen.getByRole("button", { name: "Giriş yap" }))
     expect(
-      screen.queryByRole("button", { name: /Emre Şahin/ })
-    ).not.toBeInTheDocument()
+      await screen.findByText("Bu kullanıcı pasif durumda")
+    ).toBeInTheDocument()
+    expect(useAuthStore.getState().user).toBeNull()
+  })
+
+  it("oturum sunucuda düşmüşse (401) yerel oturum temizlenir, giriş ekranına dönülür", async () => {
+    // Mock'ta sunucu oturumunun düşmesi: pasif personelin /auth/me isteği 401 döner
+    db.personel.update(TEST_USERS.personel.id, { aktif: false })
+    const { router } = renderRoute("/takvim", { as: TEST_USERS.personel })
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"))
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(router.state.location.state).toEqual({ from: "/takvim" })
   })
 
   it("çıkış yapınca oturum kapanır ve /login'e dönülür", async () => {

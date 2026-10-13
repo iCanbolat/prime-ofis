@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from "react-router"
 
 import { PageHeader } from "@/components/shared/page-header"
+import { useDevAraclari } from "@/features/ayarlar/queries"
 import { hasRole, useAuthStore } from "@/features/auth/store"
 import { cn } from "@/lib/utils"
 import type { Rol } from "@prime/shared/types/domain"
 
-const TABS: { to: string; label: string; roles?: Rol[] }[] = [
+const TABS: { to: string; label: string; roles?: Rol[]; dev?: true }[] = [
   { to: "buro", label: "Büro" },
   { to: "personel", label: "Personel", roles: ["YONETICI"] },
   { to: "sablonlar", label: "Mesaj Şablonları", roles: ["YONETICI"] },
@@ -13,12 +14,16 @@ const TABS: { to: string; label: string; roles?: Rol[] }[] = [
   { to: "luca", label: "Luca Aktarımı", roles: ["YONETICI"] },
   { to: "bildirimler", label: "Bildirimlerim" },
   { to: "gonderimler", label: "Gönderim Geçmişi", roles: ["YONETICI"] },
-  { to: "gelistirici", label: "Geliştirici" },
+  { to: "gelistirici", label: "Geliştirici", dev: true },
 ]
 
 export function AyarlarLayout() {
   const user = useAuthStore((s) => s.user)
-  const tabs = TABS.filter((tab) => !tab.roles || hasRole(user, tab.roles))
+  const devAraclari = useDevAraclari()
+  const tabs = TABS.filter(
+    (tab) =>
+      (!tab.roles || hasRole(user, tab.roles)) && (!tab.dev || devAraclari)
+  )
 
   return (
     <>

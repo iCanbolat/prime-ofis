@@ -5,4 +5,6 @@
  * Kurallar: kolon adları snake_case (drizzle `casing`), enum'lar `text().$type<Union>()`,
  * para `numeric(14,2)` (mode number), ISO zamanlar `timestamptz` (mode string), `yyyy-MM-dd` → `date`.
  */
-export {}
+export * from "./aktivite.js"
+export * from "./buro.js"
+export * from "./personel.js"

@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { useAuthStore } from "@/features/auth/store"
 import { http } from "@/lib/http"
 import { db } from "@/mocks/db"
-import { DEMO_GIRIS_SIFRESI, PERSONEL } from "@prime/mock-data/factories/personel"
+import {
+  DEMO_GIRIS_SIFRESI,
+  PERSONEL,
+} from "@prime/mock-data/factories/personel"
 import type {
   LoginResponse,
   PersonelBilgi,
@@ -34,7 +37,10 @@ const olustur = (over: Partial<PersonelOlusturRequest> = {}) =>
   })
 
 const giris = (personelId: string, sifre: string) =>
-  http.post<LoginResponse>("/auth/login", { personelId, sifre })
+  http.post<LoginResponse>("/auth/login", {
+    eposta: db.personel.find(personelId)?.eposta ?? `${personelId}@yok.test`,
+    sifre,
+  })
 
 beforeEach(() => useAuthStore.setState({ user: YONETICI }))
 

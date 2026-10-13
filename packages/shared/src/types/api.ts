@@ -90,7 +90,7 @@ import type {
 } from "../tahsilat/kurallar"
 
 export interface LoginRequest {
-  personelId: string
+  eposta: string
   sifre: string
 }
 
@@ -119,6 +119,7 @@ export interface PersonelSifreRequest extends YoneticiOnayi {
   sifre: string
 }
 
+/** `POST /auth/login` ve `GET /auth/me` yanıtı */
 export interface LoginResponse {
   personel: Personel
 }

@@ -6,7 +6,7 @@ test("giriş yapıp gösterge paneline ulaşılır", async ({ page }) => {
   await page.goto("/")
   await expect(page).toHaveURL(/\/login$/)
 
-  await page.getByRole("button", { name: /Ayşe Yılmaz/ }).click()
+  await page.getByLabel("E-posta").fill("ayse.yilmaz@primemusavirlik.com.tr")
   await page.getByLabel("Şifre").fill("yanlis-sifre")
   await page.getByRole("button", { name: "Giriş yap" }).click()
   await expect(page.getByText("Kullanıcı veya şifre hatalı")).toBeVisible()

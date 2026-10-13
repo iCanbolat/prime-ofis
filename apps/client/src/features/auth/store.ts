@@ -12,6 +12,11 @@ interface AuthState {
 
 export const AUTH_STORAGE_KEY = "prime-ofis:session"
 
+/**
+ * Oturum açan personel. Asıl oturum sunucuda (httpOnly cookie); burada saklanan kopya sayfa
+ * yenilenince arayüzün beklemeden açılması içindir ve `useOturum` ile doğrulanır.
+ */
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -30,4 +35,5 @@ export const useAuthStore = create<AuthState>()(
 export const hasRole = (user: Personel | null, roles: Rol[]) =>
   user !== null && roles.includes(user.rol)
 
+// Yalnızca mock API (MSW) kullanır; gerçek API'ye başlık gönderilmez (`lib/http.ts`)
 setActorIdProvider(() => useAuthStore.getState().user?.id)

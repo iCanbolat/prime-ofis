@@ -37,9 +37,10 @@ import {
   useVaultStore,
 } from "@/features/kasa/store"
 import { deriveKey, verifyKey } from "@/lib/crypto"
+import { MOCK_MODU } from "@/lib/http"
 
-const demoModu =
-  import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true"
+// Demo kasası (`demo1234`) yalnızca mock API'de kurulur
+const demoModu = MOCK_MODU
 
 /** Uygulama genelinde tek örnek: `requireKey()` çağrıldığında açılır. */
 export function KasaKilitDialog() {

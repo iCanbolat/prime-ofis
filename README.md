@@ -23,6 +23,7 @@ cp apps/api/.env.example apps/api/.env      # SECRET_KEY: openssl rand -base64 3
 pnpm db:up                                  # Postgres (127.0.0.1:5433) + MinIO (9000, konsol 9001)
 pnpm --filter @prime/api db:migrate
 pnpm dev                                    # shared/mock-data watch + api (3000) + client (5173, /api → 3000)
+curl -X POST http://localhost:3000/api/dev/reset   # seed verisi (DEV_ARACLARI=true); giriş: ayse.yilmaz@primemusavirlik.com.tr / demo1234
 ```
 
 - Mock API ile (backend olmadan): `VITE_ENABLE_MOCKS=true pnpm --filter @prime/client dev`
@@ -49,7 +50,11 @@ Testcontainers yerine o veritabanı kullanılır (tablolar her testte boşaltıl
 ```bash
 cp .env.example .env        # parolaları ve SECRET_KEY'i doldurun
 docker compose up -d --build
+docker compose exec api node dist/cli.js kurulum   # büro + ilk yönetici (yalnızca boş veritabanında; eksik değerler sorulur)
 ```
+
+Gizli değer anahtarını değiştirmek: eski anahtarı `SECRET_KEY_ESKI`, yenisini `SECRET_KEY` yapıp
+`docker compose exec api node dist/cli.js gizli:dondur`, ardından `SECRET_KEY_ESKI`'yi kaldırın.
 
 Servisler: `client` (Caddy: SPA + `/api` proxy + otomatik HTTPS, 128 MB), `api` (1 GB), `migrate` (tek seferlik),
 `db` (Postgres 17, 1 GB), `minio` (512 MB). Ayrıntı: `.claude/backend.md` § 4.

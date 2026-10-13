@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { authApi } from "@/features/auth/api"
@@ -6,6 +7,29 @@ import { useVaultStore } from "@/features/kasa/store"
 
 export const personelKeys = {
   all: ["personel"] as const,
+}
+
+export const oturumKey = ["auth", "me"] as const
+
+/**
+ * Sunucudaki oturumu doğrular. Yerel kullanıcı (localStorage) yalnızca önbellektir: açılışta
+ * `/auth/me` ile tazelenir; 401 → `http.ts` yetkisiz işleyicisi oturumu temizler.
+ */
+export function useOturum(enabled = true) {
+  const query = useQuery({
+    queryKey: oturumKey,
+    queryFn: authApi.me,
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+  })
+  const personel = query.data?.personel
+  useEffect(() => {
+    if (!personel) return
+    const { user, setUser } = useAuthStore.getState()
+    if (JSON.stringify(user) !== JSON.stringify(personel)) setUser(personel)
+  }, [personel])
+  return query
 }
 
 export function usePersonelList() {
@@ -41,21 +65,24 @@ export const usePersonelGuncelle = () =>
   })
 
 export function useLogin() {
+  const queryClient = useQueryClient()
   const setUser = useAuthStore((s) => s.setUser)
   return useMutation({
     mutationFn: authApi.login,
-    onSuccess: ({ personel }) => setUser(personel),
+    onSuccess: ({ personel }) => {
+      // Önceki kullanıcının önbelleği yeni oturuma taşınmasın
+      queryClient.clear()
+      queryClient.setQueryData(oturumKey, { personel })
+      setUser(personel)
+    },
   })
 }
 
 export function useLogout() {
   const queryClient = useQueryClient()
-  const user = useAuthStore((s) => s.user)
   const clear = useAuthStore((s) => s.clear)
   return useMutation({
-    mutationFn: async () => {
-      if (user) await authApi.logout(user.id)
-    },
+    mutationFn: authApi.logout,
     // Sunucu hatası olsa bile oturum kapatılır.
     onSettled: () => {
       useVaultStore.getState().lock()

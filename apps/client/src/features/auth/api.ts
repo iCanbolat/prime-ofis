@@ -11,8 +11,9 @@ import type { Personel } from "@prime/shared/types/domain"
 
 export const authApi = {
   login: (body: LoginRequest) => http.post<LoginResponse>("/auth/login", body),
-  logout: (personelId: string) =>
-    http.post<void>("/auth/logout", { personelId }),
+  logout: () => http.post<void>("/auth/logout"),
+  /** Cookie oturumunun personeli; oturum yoksa 401 */
+  me: () => http.get<LoginResponse>("/auth/me"),
   personelList: () => http.get<Personel[]>("/personel"),
   personelOlustur: (body: PersonelOlusturRequest) =>
     http.post<Personel>("/personel", body),

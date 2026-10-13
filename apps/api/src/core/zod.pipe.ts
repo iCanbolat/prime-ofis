@@ -9,17 +9,33 @@ import type { z } from "zod"
 export class ZodPipe<S extends z.ZodType> implements PipeTransform {
   constructor(
     private readonly sema: S,
-    private readonly status: 400 | 422 = 400
+    private readonly status: 400 | 422 = 400,
+    private readonly secenek: ZodDogrulaSecenekleri = {}
   ) {}
 
   transform(deger: unknown): z.output<S> {
-    const sonuc = this.sema.safeParse(deger)
-    if (sonuc.success) return sonuc.data
-    const ilk = sonuc.error.issues[0]
-    const yol = ilk?.path.length ? `${ilk.path.join(".")}: ` : ""
-    throw new HttpException(
-      { message: `${yol}${ilk?.message ?? "Geçersiz istek"}` },
-      this.status
-    )
+    return zodDogrula(this.sema, deger, this.status, this.secenek)
   }
+}
+
+export interface ZodDogrulaSecenekleri {
+  /** false: mesaja alan yolu eklenmez (şemadaki mesajlar zaten tam cümleyse, mock ile birebir) */
+  yolOneki?: boolean
+}
+
+/** ZodPipe'ın fonksiyon hâli: doğrulama sırası önemliyse (ör. önce yetki, sonra gövde) */
+export function zodDogrula<S extends z.ZodType>(
+  sema: S,
+  deger: unknown,
+  status: 400 | 422 = 400,
+  { yolOneki = true }: ZodDogrulaSecenekleri = {}
+): z.output<S> {
+  const sonuc = sema.safeParse(deger)
+  if (sonuc.success) return sonuc.data
+  const ilk = sonuc.error.issues[0]
+  const yol = yolOneki && ilk?.path.length ? `${ilk.path.join(".")}: ` : ""
+  throw new HttpException(
+    { message: `${yol}${ilk?.message ?? "Geçersiz istek"}` },
+    status
+  )
 }

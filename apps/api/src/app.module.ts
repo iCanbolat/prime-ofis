@@ -1,12 +1,20 @@
 import { Module, RequestMethod, type DynamicModule } from "@nestjs/common"
 import { LoggerModule } from "nestjs-pino"
 
+import { AktiviteModule } from "./aktivite/aktivite.module.js"
+import { AuthModule } from "./auth/auth.module.js"
+import { BildirimModule } from "./bildirim/bildirim.module.js"
+import { BuroModule } from "./buro/buro.module.js"
 import { ConfigModule, ENV } from "./config/config.module.js"
-import type { Env } from "./config/env.js"
+import { envOku, type Env } from "./config/env.js"
 import { CoreModule } from "./core/core.module.js"
 import { DbModule } from "./db/db.module.js"
+import { DevModule } from "./dev/dev.module.js"
+import { SeedModule } from "./dev/seed.module.js"
+import { DosyaModule } from "./dosya/dosya.module.js"
 import { HealthController } from "./health/health.controller.js"
 import { JobsModule } from "./jobs/jobs.module.js"
+import { PersonelModule } from "./personel/personel.module.js"
 import { StorageModule } from "./storage/storage.module.js"
 
 /** Loglarda asla görünmemesi gerekenler (gövde zaten loglanmaz; başlıklar ve hata nesneleri için) */
@@ -16,6 +24,7 @@ const REDAKSIYON = [
   'res.headers["set-cookie"]',
   "*.sifre",
   "*.yoneticiSifresi",
+  "*.eposta",
   "*.dataUrl",
   "*.gorselDataUrl",
 ]
@@ -24,6 +33,7 @@ const REDAKSIYON = [
 export class AppModule {
   /** `ortam`: ham ortam değişkenleri, `process.env` üzerine yazılır (testler için) */
   static forRoot(ortam?: Record<string, string | undefined>): DynamicModule {
+    const env = envOku({ ...process.env, ...ortam })
     return {
       module: AppModule,
       imports: [
@@ -56,6 +66,14 @@ export class AppModule {
         DbModule,
         StorageModule,
         JobsModule,
+        AuthModule,
+        BildirimModule,
+        AktiviteModule,
+        PersonelModule,
+        BuroModule,
+        DosyaModule,
+        SeedModule,
+        ...(env.DEV_ARACLARI ? [DevModule] : []),
       ],
       controllers: [HealthController],
     }

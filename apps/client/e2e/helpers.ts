@@ -10,10 +10,16 @@ export const KULLANICI = {
   personel: "Mehmet Kaya",
 } as const
 
+/** Seed personelinin giriş e-postaları (`packages/mock-data/src/factories/personel.ts`) */
+const EPOSTA: Record<string, string> = {
+  [KULLANICI.yonetici]: "ayse.yilmaz@primemusavirlik.com.tr",
+  [KULLANICI.personel]: "mehmet.kaya@primemusavirlik.com.tr",
+}
+
 /** Giriş ekranından hazır kullanıcıyla oturum açar ve gösterge paneline iner. */
 export async function girisYap(page: Page, ad: string = KULLANICI.yonetici) {
   await page.goto("/login")
-  await page.getByRole("button", { name: new RegExp(ad) }).click()
+  await page.getByLabel("E-posta").fill(EPOSTA[ad]!)
   await page.getByLabel("Şifre").fill(DEMO_GIRIS_SIFRESI)
   await page.getByRole("button", { name: "Giriş yap" }).click()
   await expect(page).toHaveURL("/")
@@ -53,10 +59,9 @@ export async function kasaKilidiniAc(page: Page) {
  */
 export async function aktifPortalTokeni(page: Page): Promise<string> {
   await page.goto("/login")
-  // Mock DB ilk API isteğinde oluşur; giriş listesi gelince hazırdır
-  await expect(
-    page.getByRole("button", { name: new RegExp(KULLANICI.yonetici) })
-  ).toBeVisible()
+  // Uygulama MSW hazır olunca çizilir; mock DB ilk API isteğinde oluşur (oturumsuz bir uçla)
+  await expect(page.getByLabel("E-posta")).toBeVisible()
+  await page.evaluate(() => fetch("/api/buro"))
   const token = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((k) =>
       k.startsWith("prime-ofis:db:")
