@@ -19,6 +19,7 @@ interface IsTanimi {
   isleyici: (isler: Job<object>[]) => Promise<unknown>
   secenekler: WorkOptions
   cron?: string
+  acilista?: boolean
 }
 
 /**
@@ -37,19 +38,31 @@ export class IsKuyrugu implements OnApplicationBootstrap, OnApplicationShutdown 
 
   constructor(@Inject(ENV) private readonly env: Env) {}
 
-  /** İş tanımı; `cron` verilirse İstanbul saatine göre zamanlanır (ör. `"0 3 * * *"`). */
+  /**
+   * İş tanımı; `cron` verilirse İstanbul saatine göre zamanlanır (ör. `"0 3 * * *"`).
+   * `acilista`: uygulama açılınca bir kez kuyruğa atılır (kapalıyken kaçırılan çalışmayı yakalar).
+   */
   tanimla<T extends object>(
     ad: string,
     isleyici: (isler: Job<T>[]) => Promise<unknown>,
-    secenekler: WorkOptions & { cron?: string } = {}
+    secenekler: WorkOptions & { cron?: string; acilista?: boolean } = {}
   ) {
-    const { cron, ...workSecenekleri } = secenekler
+    const { cron, acilista, ...workSecenekleri } = secenekler
     this.tanimlar.push({
       ad,
       isleyici: isleyici as IsTanimi["isleyici"],
       secenekler: workSecenekleri,
       cron,
+      acilista,
     })
+  }
+
+  /** `acilista` işaretli işleri yeniden kuyruğa atar (dev reset: seed yüklendikten sonra) */
+  async acilisIsleriniGonder() {
+    if (!this.env.JOB_WORKERS) return
+    for (const t of this.tanimlar.filter((t) => t.acilista)) {
+      await this.gonder(t.ad, {}, { singletonKey: "acilis" })
+    }
   }
 
   async gonder(ad: string, veri: object = {}, secenekler?: SendOptions) {
@@ -64,6 +77,7 @@ export class IsKuyrugu implements OnApplicationBootstrap, OnApplicationShutdown 
       await boss.createQueue(t.ad)
       await boss.work(t.ad, t.secenekler, t.isleyici)
       if (t.cron) await boss.schedule(t.ad, t.cron, null, { tz: ZAMAN_DILIMI })
+      if (t.acilista) await boss.send(t.ad, {}, { singletonKey: "acilis" })
     }
     if (this.tanimlar.length) {
       this.logger.log(`${this.tanimlar.length} iş kaydedildi`)

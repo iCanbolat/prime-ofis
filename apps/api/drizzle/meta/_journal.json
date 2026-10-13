@@ -50,6 +50,13 @@
       "when": 1791913123327,
       "tag": "0006_faz5_ice_aktarim",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791913659186,
+      "tag": "0007_faz5_tahsilat",
+      "breakpoints": true
     }
   ]
 }

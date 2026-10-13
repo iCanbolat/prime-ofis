@@ -45,4 +45,26 @@ export class BuroService {
     await this.aktiviteler.log({ aktorId: aktor.id, eylem: "SABLON_GUNCELLENDI" })
     return nullsuz(guncel!)
   }
+
+  /** Tahsilat hatırlatmalarında gösterilen IBAN; boş değer kaldırır */
+  @Transactional()
+  async ibanGuncelle(aktor: Personel, body: unknown): Promise<Buro> {
+    const mevcut = await this.getir()
+    const ham = (body && typeof body === "object" ? body : {}) as { iban?: unknown }
+    if (ham.iban !== undefined && ham.iban !== null && typeof ham.iban !== "string")
+      throw new BadRequestException({ message: "Geçerli bir TR IBAN girin" })
+    const temiz = ham.iban?.replace(/\s/g, "").toUpperCase() || null
+    if (temiz && !/^TR\d{24}$/.test(temiz))
+      throw new BadRequestException({ message: "Geçerli bir TR IBAN girin" })
+    const [guncel] = await this.txHost.tx
+      .update(buro)
+      .set({ iban: temiz })
+      .where(eq(buro.id, mevcut.id))
+      .returning()
+    await this.aktiviteler.log(
+      { aktorId: aktor.id, eylem: "BURO_GUNCELLENDI", aciklama: "IBAN" },
+      false
+    )
+    return nullsuz(guncel!)
+  }
 }

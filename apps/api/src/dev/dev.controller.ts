@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm"
 import { Public } from "../auth/auth.decorators.js"
 import { uygulamaTablolari } from "../db/bosalt.js"
 import { DB, type Veritabani } from "../db/db.module.js"
+import { IsKuyrugu } from "../jobs/jobs.module.js"
 import { SeedYukleyici } from "./seed-yukleyici.js"
 
 /** Yalnızca `DEV_ARACLARI=true` iken yüklenir (production'da env doğrulaması yasaklar) */
@@ -11,7 +12,8 @@ import { SeedYukleyici } from "./seed-yukleyici.js"
 export class DevController {
   constructor(
     @Inject(DB) private readonly db: Veritabani,
-    private readonly seed: SeedYukleyici
+    private readonly seed: SeedYukleyici,
+    private readonly isler: IsKuyrugu
   ) {}
 
   /** Oturum gerektirmez: sıfırlama tüm oturumları da siler (ilk kurulumda kullanıcı yoktur) */
@@ -20,6 +22,8 @@ export class DevController {
   @HttpCode(204)
   async reset() {
     await this.seed.sifirla()
+    // Seed geçmiş tarihli: açılışta çalışan işler (ör. aylık ücret borçları) bugüne yetişsin
+    await this.isler.acilisIsleriniGonder()
   }
 
   /** Tablo başına satır sayısı; client bu uç 200 dönerse Geliştirici sayfasını gösterir */

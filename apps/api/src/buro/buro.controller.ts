@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put } from "@nestjs/common"
+import { Body, Controller, Get, Patch, Put } from "@nestjs/common"
 
 import type { Personel } from "@prime/shared/types/domain"
 
@@ -12,6 +12,12 @@ export class BuroController {
   @Get()
   getir() {
     return this.burolar.getir()
+  }
+
+  @Patch()
+  @Roller("YONETICI", "Büro bilgilerini yalnızca yönetici değiştirebilir")
+  guncelle(@Aktor() aktor: Personel, @Body() body: unknown) {
+    return this.burolar.ibanGuncelle(aktor, body)
   }
 
   @Put("sablonlar")

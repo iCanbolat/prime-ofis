@@ -22,6 +22,7 @@ import { KasaModule } from "./kasa/kasa.module.js"
 import { MukellefModule } from "./mukellef/mukellef.module.js"
 import { PersonelModule } from "./personel/personel.module.js"
 import { StorageModule } from "./storage/storage.module.js"
+import { TahsilatModule } from "./tahsilat/tahsilat.module.js"
 import { TakvimModule } from "./takvim/takvim.module.js"
 
 /** Loglarda asla görünmemesi gerekenler (gövde zaten loglanmaz; başlıklar ve hata nesneleri için) */
@@ -86,6 +87,7 @@ export class AppModule {
         ArsivModule,
         EvrakModule,
         IceAktarimModule,
+        TahsilatModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),
       ],

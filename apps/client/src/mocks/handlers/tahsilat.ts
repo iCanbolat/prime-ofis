@@ -21,6 +21,12 @@ import {
   yuvarla,
   type KesintiDurum,
 } from "@prime/shared/tahsilat/kurallar"
+import {
+  acilisBakiyesiHatasi,
+  hareketHatasi,
+  kesintiIceAktarHatasi,
+  ucretHatasi,
+} from "@prime/shared/tahsilat/girdi"
 import { formatDonem, formatTRY } from "@prime/shared/lib/format"
 import { bugun } from "@prime/shared/lib/tarih"
 import { db } from "@/mocks/db"
@@ -49,9 +55,6 @@ import type {
 } from "@prime/shared/types/api"
 import type { CariHareket, Mukellef, MukellefUcret } from "@prime/shared/types/domain"
 
-const DONEM_RE = /^\d{4}-(0[1-9]|1[0-2])$/
-const TARIH_RE = /^\d{4}-\d{2}-\d{2}$/
-const MAKS_TUTAR = 10_000_000
 export const SISTEM_AKTOR = "sistem"
 
 /**
@@ -150,36 +153,6 @@ function cariSatirlari(
         (!sorumlu || m.sorumluPersonelId === sorumlu)
     )
     .map((m) => cariSatiri(m, grup.get(m.id) ?? [], bugunYmd))
-}
-
-function hareketDogrula(body: HareketEkleRequest): string | null {
-  if (!body || (body.tip !== "BORC" && body.tip !== "ODEME"))
-    return "Geçersiz hareket tipi"
-  if (!TARIH_RE.test(body.tarih ?? "")) return "Geçerli bir tarih girin"
-  if (body.tarih > bugun()) return "Gelecek tarihli kayıt girilemez"
-  if (body.tip === "BORC") {
-    if (!(body.brut > 0) || body.brut > MAKS_TUTAR)
-      return "Brüt tutar sıfırdan büyük olmalı"
-    if (![0, 1, 10, 20].includes(body.kdvOrani)) return "Geçersiz KDV oranı"
-    if (!body.aciklama?.trim()) return "Açıklama zorunludur"
-  } else {
-    if (body.kalem !== "ODEME" && body.kalem !== "DUZELTME")
-      return "Geçersiz ödeme türü"
-    if (!(body.tutar > 0) || body.tutar > MAKS_TUTAR)
-      return "Tutar sıfırdan büyük olmalı"
-    if (body.kalem === "DUZELTME" && !body.aciklama?.trim())
-      return "Düzeltme için açıklama zorunludur"
-  }
-  return null
-}
-
-function ucretDogrula(u: MukellefUcret): string | null {
-  if (!(u.aylikBrut > 0) || u.aylikBrut > MAKS_TUTAR)
-    return "Aylık ücret sıfırdan büyük olmalı"
-  if (![0, 1, 10, 20].includes(u.kdvOrani)) return "Geçersiz KDV oranı"
-  if (typeof u.stopajVar !== "boolean") return "Stopaj bilgisi eksik"
-  if (!DONEM_RE.test(u.baslangicDonem ?? "")) return "Başlangıç dönemi geçersiz"
-  return null
 }
 
 const bosKesintiOzeti = (): Record<KesintiDurum, number> => ({
@@ -328,7 +301,7 @@ export const tahsilatHandlers = [
       const actor = requireActor(request)
       if (actor instanceof Response) return actor
       const body = await request.json()
-      const hata = hareketDogrula(body)
+      const hata = hareketHatasi(body, bugun())
       if (hata) return errorResponse(400, hata)
       const m = db.mukellef.find(body.mukellefId)
       if (!m) return notFound("Mükellef bulunamadı")
@@ -477,12 +450,8 @@ export const tahsilatHandlers = [
         const b = k.bakiye
         const hata = !m
           ? "Mükellef bulunamadı"
-          : (k.ucret && ucretDogrula(k.ucret)) ||
-            (b &&
-              (!TARIH_RE.test(b.tarih ?? "") ||
-                !Number.isFinite(b.tutar) ||
-                Math.abs(b.tutar) > MAKS_TUTAR) &&
-              "Açılış bakiyesi geçersiz") ||
+          : (k.ucret && ucretHatasi(k.ucret)) ||
+            (b && acilisBakiyesiHatasi(b)) ||
             null
         if (!m || hata) {
           sonuc.hatalar.push({
@@ -579,7 +548,7 @@ export const tahsilatHandlers = [
       if (!m) return notFound("Mükellef bulunamadı")
       const { ucret } = await request.json()
       if (ucret) {
-        const hata = ucretDogrula(ucret)
+        const hata = ucretHatasi(ucret)
         if (hata) return errorResponse(400, hata)
       }
       // Bugüne kadarki aylar eski ücretle kesinleşsin; yeni ücret sonraki aylara uygulanır
@@ -653,18 +622,8 @@ export const tahsilatHandlers = [
       const actor = requireActor(request)
       if (actor instanceof Response) return actor
       const { yil, dosyaAdi, kayitlar } = await request.json()
-      if (!(yil >= 2000 && yil <= 2100))
-        return errorResponse(400, "Geçersiz yıl")
-      if (!Array.isArray(kayitlar) || kayitlar.length === 0)
-        return errorResponse(400, "İçe aktarılacak satır yok")
-      const yilDisi = kayitlar.filter((k) => !k.donem?.startsWith(`${yil}-`))
-      if (yilDisi.length)
-        return errorResponse(
-          400,
-          `${yilDisi.length} satır ${yil} yılına ait değil`
-        )
-      if (kayitlar.some((k) => !/^\d{10,11}$/.test(k.vkn) || !(k.kesinti > 0)))
-        return errorResponse(400, "Geçersiz VKN veya kesinti tutarı")
+      const hata = kesintiIceAktarHatasi(yil, kayitlar)
+      if (hata) return errorResponse(400, hata)
 
       // Aynı yıl için yeniden yükleme öncekinin yerine geçer
       for (const eski of db.kesintiAktarim.where((a) => a.yil === yil)) {
