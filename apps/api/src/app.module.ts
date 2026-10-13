@@ -16,6 +16,7 @@ import { DosyaModule } from "./dosya/dosya.module.js"
 import { EvrakModule } from "./evrak/evrak.module.js"
 import { GorevModule } from "./gorev/gorev.module.js"
 import { HealthController } from "./health/health.controller.js"
+import { IceAktarimModule } from "./ice-aktarim/ice-aktarim.module.js"
 import { JobsModule } from "./jobs/jobs.module.js"
 import { KasaModule } from "./kasa/kasa.module.js"
 import { MukellefModule } from "./mukellef/mukellef.module.js"
@@ -84,6 +85,7 @@ export class AppModule {
         DosyaModule,
         ArsivModule,
         EvrakModule,
+        IceAktarimModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),
       ],

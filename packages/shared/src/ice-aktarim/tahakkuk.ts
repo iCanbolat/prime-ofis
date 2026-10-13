@@ -241,3 +241,12 @@ export function donemGecerliMi(tip: YukumlulukTip, donem: string): boolean {
       return /^\d{4}-(0[1-9]|1[0-2])$/.test(donem)
   }
 }
+
+/** Dönemin ilk günü (yyyy-MM-dd): "2026-08" → 08-01, "2026-Q3" → 07-01, "2025" → 01-01 */
+export function donemBaslangici(donem: string): string {
+  const ceyrek = /^(\d{4})-Q([1-4])$/.exec(donem)
+  if (ceyrek)
+    return `${ceyrek[1]}-${String(Number(ceyrek[2]) * 3 - 2).padStart(2, "0")}-01`
+  if (/^\d{4}$/.test(donem)) return `${donem}-01-01`
+  return `${donem}-01`
+}

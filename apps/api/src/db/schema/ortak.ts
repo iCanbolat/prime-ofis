@@ -1,4 +1,4 @@
-import { customType } from "drizzle-orm/pg-core"
+import { customType, numeric } from "drizzle-orm/pg-core"
 
 /**
  * ISO zaman: `timestamptz`, JS tarafında ISO metin (`2026-09-23T07:00:00.000Z`). Drizzle'ın
@@ -10,3 +10,6 @@ export const zaman = customType<{ data: string; driverData: string | Date }>({
   fromDriver: (v) => new Date(v).toISOString(),
   toDriver: (v) => v,
 })
+
+/** Para: `numeric(14,2)`, JS tarafında number */
+export const para = () => numeric({ precision: 14, scale: 2, mode: "number" })

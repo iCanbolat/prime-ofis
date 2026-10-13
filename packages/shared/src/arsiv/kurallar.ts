@@ -24,6 +24,16 @@ export const KABUL_EDILEN_TURLER: Record<string, string[]> = {
   "image/heic": [".heic"],
 }
 
+/**
+ * İçe aktarılan tablo dosyaları (mizan): arşive yüklenebilir ama arşiv yükleme ekranında seçilemez.
+ * `.xls` içerikten yalnızca genel OLE kabı olarak tanınır; CSV'nin imzası yoktur (metin).
+ */
+export const TABLO_DOSYA_TURLERI: Record<string, string[]> = {
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.ms-excel": [".xls"],
+  "text/csv": [".csv"],
+}
+
 /** `<input accept>` değeri */
 export const DOSYA_ACCEPT = Object.entries(KABUL_EDILEN_TURLER)
   .flatMap(([mime, uzantilar]) => [mime, ...uzantilar])

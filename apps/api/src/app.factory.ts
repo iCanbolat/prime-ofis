@@ -15,6 +15,10 @@ import { HataFiltresi, varsayilanMesaj } from "./core/hata.filter.js"
  * bordro) ilgili fazda route bazında daha yüksek sınır alır.
  */
 export const GOVDE_SINIRI = 15 * 1024 * 1024
+export const BUYUK_GOVDE_SINIRI = 60 * 1024 * 1024
+
+/** Toplu dosya yükleyen uçlar (`METOT yol`): gövde sınırı `BUYUK_GOVDE_SINIRI` */
+const BUYUK_GOVDE_YOLLARI = new Set(["POST /api/ice-aktarim/tahakkuklar"])
 
 /**
  * Fastify'ın kendi hataları (bozuk JSON, çok büyük gövde, desteklenmeyen içerik türü …) Nest
@@ -44,6 +48,16 @@ export function fastifyAdapter() {
 export async function uygulamayiYapilandir(app: NestFastifyApplication) {
   app.useLogger(app.get(Logger))
   app.setGlobalPrefix("api")
+  // Route'lar `init`'te kaydolur; kanca ondan önce eklenmeli
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook("onRoute", (route) => {
+      const metotlar = [route.method].flat()
+      if (metotlar.some((m) => BUYUK_GOVDE_YOLLARI.has(`${m} ${route.url}`))) {
+        route.bodyLimit = BUYUK_GOVDE_SINIRI
+      }
+    })
   app.useGlobalFilters(new HataFiltresi())
   app.enableShutdownHooks()
 

@@ -2,7 +2,11 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common"
 import { fileTypeFromBuffer } from "file-type"
 
 import { placeholderIcerik } from "@prime/mock-data/placeholder"
-import { KABUL_EDILEN_TURLER, MAKS_DOSYA_BOYUTU } from "@prime/shared/arsiv/kurallar"
+import {
+  KABUL_EDILEN_TURLER,
+  MAKS_DOSYA_BOYUTU,
+  TABLO_DOSYA_TURLERI,
+} from "@prime/shared/arsiv/kurallar"
 
 import { ENV } from "../config/config.module.js"
 import type { Env } from "../config/env.js"
@@ -11,11 +15,28 @@ import { DosyaDeposu } from "../storage/dosya-deposu.js"
 const DATA_URL = /^data:([\w/+.-]*)(;[\w=-]+)*;base64,/
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
 
+export interface DataUrlSecenekleri {
+  /** Tablo dosyaları (XLSX, XLS, CSV) kabul edilir; PDF / görsel kabul edilmez (mizan) */
+  tablo?: boolean
+}
+
 export interface CozulmusDosya {
   icerik: Buffer
   /** Magic byte'lardan tespit edilen tür (istemcinin bildirdiğine güvenilmez) */
   mimeType: string
   boyut: number
+}
+
+/**
+ * Tablo dosyasının türü: XLSX imzasından, XLS genel OLE kabından (`x-cfb`). İmzası olmayan içerik
+ * metin kontrol karakteri içermiyorsa CSV sayılır (Excel'in Türkçe CSV'si Windows-1254 olabilir;
+ * kodlama denetlenmez).
+ */
+function tabloTuru(tespit: string | undefined, icerik: Buffer): string | null {
+  if (tespit === "application/x-cfb") return "application/vnd.ms-excel"
+  if (tespit) return tespit in TABLO_DOSYA_TURLERI ? tespit : null
+  const ikili = icerik.some((b) => b < 0x09 || (b > 0x0d && b < 0x20))
+  return ikili ? null : "text/csv"
 }
 
 /** Nesne anahtarları: depo düzeni tek yerde */
@@ -35,7 +56,10 @@ export class DosyaService {
     @Inject(ENV) private readonly env: Env
   ) {}
 
-  async dataUrlCoz(dataUrl: unknown): Promise<CozulmusDosya> {
+  async dataUrlCoz(
+    dataUrl: unknown,
+    { tablo = false }: DataUrlSecenekleri = {}
+  ): Promise<CozulmusDosya> {
     const eslesme = typeof dataUrl === "string" ? DATA_URL.exec(dataUrl) : null
     if (!eslesme) throw new BadRequestException({ message: "Dosya içeriği okunamadı" })
     const base64 = (dataUrl as string).slice(eslesme[0].length)
@@ -55,6 +79,15 @@ export class DosyaService {
     }
 
     const tespit = await fileTypeFromBuffer(icerik)
+    if (tablo) {
+      const mimeType = tabloTuru(tespit?.mime, icerik)
+      if (!mimeType) {
+        throw new BadRequestException({
+          message: "Desteklenmeyen dosya türü. XLSX, XLS veya CSV yükleyin.",
+        })
+      }
+      return { icerik, mimeType, boyut: icerik.length }
+    }
     const mimeType = tespit?.mime === "image/heif" ? "image/heic" : tespit?.mime
     if (!mimeType || !(mimeType in KABUL_EDILEN_TURLER)) {
       throw new BadRequestException({

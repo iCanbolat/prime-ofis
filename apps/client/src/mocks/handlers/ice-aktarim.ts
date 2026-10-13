@@ -5,7 +5,10 @@
  */
 import { HttpResponse, http } from "msw"
 
-import { donemGecerliMi } from "@prime/shared/ice-aktarim/tahakkuk"
+import {
+  donemBaslangici,
+  donemGecerliMi,
+} from "@prime/shared/ice-aktarim/tahakkuk"
 import { mizanKontrolleri, mizanOzeti } from "@prime/shared/ice-aktarim/mizan"
 import { YUKUMLULUK_TANIMLARI } from "@prime/shared/takvim/kurallar"
 import {
@@ -38,15 +41,6 @@ import type {
 import type { Mizan, Mukellef, Personel, Tahakkuk } from "@prime/shared/types/domain"
 
 const MIZAN_KONTROL_MADDESI = "Mizan kontrol edildi"
-
-/** Dönemin ilk günü (yyyy-MM-dd): "2026-08" → 08-01, "2026-Q3" → 07-01, "2025" → 01-01 */
-function donemBaslangici(donem: string): string {
-  const ceyrek = /^(\d{4})-Q([1-4])$/.exec(donem)
-  if (ceyrek)
-    return `${ceyrek[1]}-${String(Number(ceyrek[2]) * 3 - 2).padStart(2, "0")}-01`
-  if (/^\d{4}$/.test(donem)) return `${donem}-01-01`
-  return `${donem}-01`
-}
 
 function tahakkukDogrula(
   k: TahakkukIceAktarKalem

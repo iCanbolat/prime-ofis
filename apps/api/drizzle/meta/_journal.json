@@ -43,6 +43,13 @@
       "when": 1791911663177,
       "tag": "0005_faz4_evrak",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791913123327,
+      "tag": "0006_faz5_ice_aktarim",
+      "breakpoints": true
     }
   ]
 }
