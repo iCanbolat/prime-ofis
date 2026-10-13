@@ -12,6 +12,7 @@ import { DbModule } from "./db/db.module.js"
 import { DevModule } from "./dev/dev.module.js"
 import { SeedModule } from "./dev/seed.module.js"
 import { DosyaModule } from "./dosya/dosya.module.js"
+import { GorevModule } from "./gorev/gorev.module.js"
 import { HealthController } from "./health/health.controller.js"
 import { JobsModule } from "./jobs/jobs.module.js"
 import { KasaModule } from "./kasa/kasa.module.js"
@@ -77,6 +78,7 @@ export class AppModule {
         MukellefModule,
         KasaModule,
         TakvimModule,
+        GorevModule,
         DosyaModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),
