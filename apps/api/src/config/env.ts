@@ -40,6 +40,9 @@ export const envSchema = z
     SESSION_TTL_SAAT: z.coerce.number().int().min(1).max(24 * 30).default(12),
     /** IP + e-posta başına 15 dakikadaki hatalı giriş sınırı */
     GIRIS_DENEME_SINIRI: z.coerce.number().int().min(1).default(5),
+    /** Müşteri portalında IP + token başına dakikadaki istek sınırı (yazma uçları ayrıca) */
+    PORTAL_OKUMA_SINIRI: z.coerce.number().int().min(1).default(60),
+    PORTAL_YAZMA_SINIRI: z.coerce.number().int().min(1).default(20),
 
     /** Bu süreç pg-boss işlerini (cron + kuyruk) çalıştırır mı */
     JOB_WORKERS: bool.default(true),
