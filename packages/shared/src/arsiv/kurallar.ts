@@ -3,11 +3,13 @@
  */
 import { differenceInCalendarDays } from "date-fns"
 
+import { BORDRO_BELGE_SIRASI, BORDRO_DONEM_RE } from "../bordro/kurallar"
 import { fromYmd } from "../lib/tarih"
 import type { ArsivAgacMukellef, GecerlilikDurumu } from "../types/api"
 import type {
   ArsivDosya,
   ArsivKategori,
+  BordroBelgeTur,
   Mukellef,
   MukellefTur,
 } from "../types/domain"
@@ -154,4 +156,21 @@ export function formatBoyut(byte: number): string {
 
 export function gorselMi(mimeType: string) {
   return mimeType.startsWith("image/")
+}
+
+/** Arşiv kaydının dönem / bordro belge alanlarını doğrular; geçerliyse undefined */
+export function donemAlanlariHatasi(
+  donem: unknown,
+  bordroBelge: unknown
+): string | undefined {
+  if (
+    donem !== undefined &&
+    (typeof donem !== "string" || !BORDRO_DONEM_RE.test(donem))
+  )
+    return "Geçersiz dönem"
+  if (
+    bordroBelge !== undefined &&
+    !BORDRO_BELGE_SIRASI.includes(bordroBelge as BordroBelgeTur)
+  )
+    return "Geçersiz belge türü"
 }

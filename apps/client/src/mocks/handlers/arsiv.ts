@@ -5,16 +5,13 @@ import {
   KATEGORI_SIRASI,
   MAKS_DOSYA_BOYUTU,
   agacOlustur,
+  donemAlanlariHatasi,
   dosyaMimeTuru,
   eksikZorunlu,
   gecerlilikDurumu,
   kalanGun,
 } from "@prime/shared/arsiv/kurallar"
-import {
-  BORDRO_BELGE_SIRASI,
-  BORDRO_DONEM_RE,
-  DONEMLI_KATEGORILER,
-} from "@prime/shared/bordro/kurallar"
+import { DONEMLI_KATEGORILER } from "@prime/shared/bordro/kurallar"
 import { BORDRO_BELGE_ETIKET } from "@prime/shared/bordro/sabitler"
 import { formatDonem } from "@prime/shared/lib/format"
 import { bugun } from "@prime/shared/lib/tarih"
@@ -43,27 +40,10 @@ import {
   ARSIV_KATEGORI_ETIKET,
   type ArsivDosya,
   type ArsivKategori,
-  type BordroBelgeTur,
 } from "@prime/shared/types/domain"
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
 
-/** Arşiv kaydının dönem / bordro belge alanlarını doğrular */
-function donemAlanlariHatasi(
-  donem: unknown,
-  bordroBelge: unknown
-): string | undefined {
-  if (
-    donem !== undefined &&
-    (typeof donem !== "string" || !BORDRO_DONEM_RE.test(donem))
-  )
-    return "Geçersiz dönem"
-  if (
-    bordroBelge !== undefined &&
-    !BORDRO_BELGE_SIRASI.includes(bordroBelge as BordroBelgeTur)
-  )
-    return "Geçersiz belge türü"
-}
 const SIRALAMALAR: ArsivSiralama[] = [
   "ad",
   "yuklemeTarihi",

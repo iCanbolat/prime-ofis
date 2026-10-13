@@ -2,6 +2,7 @@ import { Module, RequestMethod, type DynamicModule } from "@nestjs/common"
 import { LoggerModule } from "nestjs-pino"
 
 import { AktiviteModule } from "./aktivite/aktivite.module.js"
+import { ArsivModule } from "./arsiv/arsiv.module.js"
 import { AuthModule } from "./auth/auth.module.js"
 import { BildirimModule } from "./bildirim/bildirim.module.js"
 import { BuroModule } from "./buro/buro.module.js"
@@ -80,6 +81,7 @@ export class AppModule {
         TakvimModule,
         GorevModule,
         DosyaModule,
+        ArsivModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),
       ],

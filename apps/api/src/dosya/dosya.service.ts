@@ -1,8 +1,11 @@
-import { BadRequestException, Injectable } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable } from "@nestjs/common"
 import { fileTypeFromBuffer } from "file-type"
 
+import { placeholderIcerik } from "@prime/mock-data/placeholder"
 import { KABUL_EDILEN_TURLER, MAKS_DOSYA_BOYUTU } from "@prime/shared/arsiv/kurallar"
 
+import { ENV } from "../config/config.module.js"
+import type { Env } from "../config/env.js"
 import { DosyaDeposu } from "../storage/dosya-deposu.js"
 
 const DATA_URL = /^data:([\w/+.-]*)(;[\w=-]+)*;base64,/
@@ -27,7 +30,10 @@ export const gelenAnahtari = (talepId: string, gelenId: string) =>
  */
 @Injectable()
 export class DosyaService {
-  constructor(private readonly depo: DosyaDeposu) {}
+  constructor(
+    private readonly depo: DosyaDeposu,
+    @Inject(ENV) private readonly env: Env
+  ) {}
 
   async dataUrlCoz(dataUrl: unknown): Promise<CozulmusDosya> {
     const eslesme = typeof dataUrl === "string" ? DATA_URL.exec(dataUrl) : null
@@ -60,6 +66,18 @@ export class DosyaService {
 
   dataUrlYap(icerik: Buffer, mimeType: string) {
     return `data:${mimeType};base64,${icerik.toString("base64")}`
+  }
+
+  /**
+   * Seed kayıtlarının (dev reset, testler) nesnesi yoktur: production dışında dosya adını
+   * gösteren örnek içerik üretilir (mock ile aynı). Production'da `null`.
+   */
+  yedekDataUrl(dosya: { ad: string; mimeType: string }): string | null {
+    return this.uretimde ? null : placeholderIcerik(dosya)
+  }
+
+  get uretimde() {
+    return this.env.NODE_ENV === "production"
   }
 
   koy(anahtar: string, dosya: Pick<CozulmusDosya, "icerik" | "mimeType">) {
