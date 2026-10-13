@@ -8,6 +8,13 @@
       "when": 1791897355992,
       "tag": "0000_faz1_cekirdek",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791902386449,
+      "tag": "0001_faz2_mukellef",
+      "breakpoints": true
     }
   ]
 }

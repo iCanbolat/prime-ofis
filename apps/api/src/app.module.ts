@@ -14,6 +14,7 @@ import { SeedModule } from "./dev/seed.module.js"
 import { DosyaModule } from "./dosya/dosya.module.js"
 import { HealthController } from "./health/health.controller.js"
 import { JobsModule } from "./jobs/jobs.module.js"
+import { MukellefModule } from "./mukellef/mukellef.module.js"
 import { PersonelModule } from "./personel/personel.module.js"
 import { StorageModule } from "./storage/storage.module.js"
 
@@ -71,6 +72,7 @@ export class AppModule {
         AktiviteModule,
         PersonelModule,
         BuroModule,
+        MukellefModule,
         DosyaModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),

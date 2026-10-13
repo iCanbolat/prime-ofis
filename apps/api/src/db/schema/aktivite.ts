@@ -7,7 +7,7 @@ import { zaman } from "./ortak.js"
 
 /**
  * Aktivite akışı. `aktor_id` personel olmayabilir ("sistem", "musteri"), bu yüzden FK yok.
- * `mukellef_id` FK'sı mükellef tablosuyla (Faz 2) eklenir.
+ * `mukellef_id` de FK değildir: geçmiş kayıtlar mükellefe bağımlı tutulmaz.
  */
 export const aktivite = pgTable(
   "aktivite",

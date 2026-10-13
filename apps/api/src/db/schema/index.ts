@@ -8,3 +8,4 @@
 export * from "./aktivite.js"
 export * from "./buro.js"
 export * from "./personel.js"
+export * from "./mukellef.js"

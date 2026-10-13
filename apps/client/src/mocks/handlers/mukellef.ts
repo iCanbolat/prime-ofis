@@ -1,6 +1,12 @@
 import { HttpResponse, http } from "msw"
 
-import { isValidTckn, isValidVkn } from "@prime/shared/lib/tax-id"
+import {
+  MUKELLEF_TURLERI,
+  kimlikCakismaMesaji,
+  mukellefGirdiSemasi,
+  mukellefKimlikHatasi,
+  mukellefNormalize,
+} from "@prime/shared/mukellef/girdi"
 import { db } from "@/mocks/db"
 import {
   api,
@@ -21,73 +27,38 @@ import type {
 } from "@prime/shared/types/api"
 import type { Mukellef, MukellefTur } from "@prime/shared/types/domain"
 
-const TURLER: MukellefTur[] = ["SAHIS", "LTD", "AS"]
+const TURLER: readonly MukellefTur[] = MUKELLEF_TURLERI
 const DURUMLAR: MukellefDurumFiltre[] = ["aktif", "pasif", "tumu"]
 
+type Girdi = ReturnType<typeof mukellefNormalize>
+
 /**
- * Sunucu tarafı temel doğrulama. İstemci formu (zod) daha ayrıntılı kontrol yapar;
- * burada gerçek bir backend'in reddedeceği durumlar taklit edilir.
+ * Sunucu tarafı doğrulama (`@prime/shared/mukellef/girdi`, gerçek API ile ortak): yapı ve kimlik
+ * kontrolü, ardından sorumlu personel ve VKN/TCKN çakışması. Hata yanıtı ya da normalize girdi döner.
  */
-function validateMukellef(
-  input: MukellefInput,
-  currentId?: string
-): Response | null {
-  if (!TURLER.includes(input.tur))
-    return errorResponse(400, "Geçersiz mükellef türü")
-  if (!input.unvan?.trim()) return errorResponse(400, "Unvan zorunludur")
+function validateMukellef(body: unknown, currentId?: string): Response | Girdi {
+  const parsed = mukellefGirdiSemasi.safeParse(body)
+  if (!parsed.success)
+    return errorResponse(
+      400,
+      parsed.error.issues[0]?.message ?? "Geçersiz istek"
+    )
+  const input = mukellefNormalize(parsed.data)
   if (!db.personel.find(input.sorumluPersonelId)) {
     return errorResponse(400, "Sorumlu personel bulunamadı")
   }
+  const kimlikHatasi = mukellefKimlikHatasi(input)
+  if (kimlikHatasi) return errorResponse(400, kimlikHatasi)
 
-  if (input.tur === "SAHIS") {
-    if (!input.tckn || !isValidTckn(input.tckn)) {
-      return errorResponse(400, "Geçerli bir TCKN giriniz")
-    }
-    const duplicate = db.mukellef.where(
-      (m) => m.tckn === input.tckn && m.id !== currentId
-    )[0]
-    if (duplicate) {
-      return errorResponse(
-        409,
-        `Bu TCKN ile kayıtlı mükellef var: ${duplicate.unvan}`
-      )
-    }
-  } else {
-    if (!input.vkn || !isValidVkn(input.vkn)) {
-      return errorResponse(400, "Geçerli bir VKN giriniz")
-    }
-    const duplicate = db.mukellef.where(
-      (m) => m.vkn === input.vkn && m.id !== currentId
-    )[0]
-    if (duplicate) {
-      return errorResponse(
-        409,
-        `Bu VKN ile kayıtlı mükellef var: ${duplicate.unvan}`
-      )
-    }
+  const duplicate = db.mukellef.where(
+    (m) =>
+      m.id !== currentId &&
+      (input.tur === "SAHIS" ? m.tckn === input.tckn : m.vkn === input.vkn)
+  )[0]
+  if (duplicate) {
+    return errorResponse(409, kimlikCakismaMesaji(input.tur, duplicate.unvan))
   }
-  return null
-}
-
-/** Türe ait olmayan kimlik alanlarını temizler (Şahıs'ta VKN, şirkette TCKN kalmasın). */
-function normalizeInput(body: MukellefInput): MukellefInput {
-  // Ücret yalnızca yöneticinin kullandığı `PUT /mukellefler/:id/ucret` ile değişir
-  const { ucret: _ucret, ...input } = body
-  const isSahis = input.tur === "SAHIS"
-  return {
-    ...input,
-    unvan: input.unvan.trim(),
-    vkn: isSahis ? undefined : input.vkn,
-    tckn: isSahis ? input.tckn : undefined,
-    ticaretSicilNo: isSahis ? undefined : input.ticaretSicilNo || undefined,
-    mersisNo: isSahis ? undefined : input.mersisNo || undefined,
-    defterTuru: isSahis ? input.defterTuru : "BILANCO",
-    sgkIsyeriVar: input.calisanSayisi > 0 ? true : input.sgkIsyeriVar,
-    tercihKanal:
-      input.tercihKanal === "EPOSTA" || input.tercihKanal === "WHATSAPP"
-        ? input.tercihKanal
-        : undefined,
-  }
+  return input
 }
 
 /** Sorumlu değişince yeni sorumluya giden bildirim */
@@ -165,9 +136,8 @@ export const mukellefHandlers = [
     const actor = requireActor(request)
     if (actor instanceof Response) return actor
 
-    const input = normalizeInput(await request.json())
-    const invalid = validateMukellef(input)
-    if (invalid) return invalid
+    const input = validateMukellef(await request.json())
+    if (input instanceof Response) return input
 
     // Demo kasa ilk istekte o anki tüm mükellefler için örnek şifre üretir; kasa henüz
     // oluşmadıysa yeni mükellef de sahte şifre almasın diye önce kasayı hazırla.
@@ -206,14 +176,13 @@ export const mukellefHandlers = [
         hatalar: [],
       }
       for (const { satir, mukellef } of kayitlar) {
-        const input = normalizeInput(mukellef)
-        const invalid = validateMukellef(input)
-        if (invalid) {
-          if (invalid.status === 409) sonuc.atlanan++
+        const input = validateMukellef(mukellef)
+        if (input instanceof Response) {
+          if (input.status === 409) sonuc.atlanan++
           else
             sonuc.hatalar.push({
               satir,
-              mesaj: ((await invalid.json()) as { message: string }).message,
+              mesaj: ((await input.json()) as { message: string }).message,
             })
           continue
         }
@@ -279,9 +248,8 @@ export const mukellefHandlers = [
       const onceki = db.mukellef.find(params.id)
       if (!onceki) return notFound("Mükellef bulunamadı")
 
-      const input = normalizeInput(await request.json())
-      const invalid = validateMukellef(input, params.id)
-      if (invalid) return invalid
+      const input = validateMukellef(await request.json(), params.id)
+      if (input instanceof Response) return input
 
       const updated = db.mukellef.update(params.id, input)
       logActivity(
