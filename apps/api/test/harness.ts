@@ -36,6 +36,7 @@ export interface Istemci {
   get: (yol: string) => Promise<Yanit>
   post: (yol: string, govde?: unknown) => Promise<Yanit>
   put: (yol: string, govde?: unknown) => Promise<Yanit>
+  delete: (yol: string) => Promise<Yanit>
 }
 
 /**
@@ -76,7 +77,7 @@ export async function testUygulamasi(
   const istek = app.inject.bind(app)
 
   const istemci = (cookie?: string): Istemci => {
-    const yap = (method: "GET" | "POST" | "PUT", yol: string, govde?: unknown) =>
+    const yap = (method: "GET" | "POST" | "PUT" | "DELETE", yol: string, govde?: unknown) =>
       istek({
         method,
         url: `/api${yol}`,
@@ -87,6 +88,7 @@ export async function testUygulamasi(
       get: (yol) => yap("GET", yol),
       post: (yol, govde) => yap("POST", yol, govde),
       put: (yol, govde) => yap("PUT", yol, govde),
+      delete: (yol) => yap("DELETE", yol),
     }
   }
 

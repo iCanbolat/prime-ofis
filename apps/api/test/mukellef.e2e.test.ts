@@ -25,21 +25,21 @@ const yeniSahis = (): MukellefInput => ({
 
 describe("mükellef", () => {
   let t: TestUygulamasi
-  let zeynep: Istemci // p_2
+  let mehmet: Istemci // p_2 (PERSONEL)
   beforeAll(async () => {
     t = await testUygulamasi()
   })
   afterAll(() => t.kapat())
 
   const liste = async (sorgu = "") =>
-    (await zeynep.get(`/mukellefler${sorgu}`)).json<MukellefListResponse>()
+    (await mehmet.get(`/mukellefler${sorgu}`)).json<MukellefListResponse>()
   const aktiviteler = (eylem: string) =>
     t.db.select().from(aktivite).where(eq(aktivite.eylem, eylem as never))
 
   describe("GET /mukellefler — sayfalama, sıralama, durum (40 kayıtlık seed)", () => {
     beforeAll(async () => {
       await t.app.get(SeedYukleyici).sifirla()
-      zeynep = t.istemci(await t.girisYap(PERSONEL[1]!.id))
+      mehmet = t.istemci(await t.girisYap(PERSONEL[1]!.id))
     })
 
     it("sayfa parametresi yoksa tüm kayıtları döner", async () => {
@@ -99,22 +99,22 @@ describe("mükellef", () => {
   describe("yazma uçları (fixture)", () => {
     beforeEach(async () => {
       await t.fixtureYukle()
-      zeynep = t.istemci(await t.girisYap(PERSONEL[1]!.id))
+      mehmet = t.istemci(await t.girisYap(PERSONEL[1]!.id))
     })
 
     it("GET /:id kaydı döner (ücret dahil); olmayan 404", async () => {
-      const r = await zeynep.get("/mukellefler/m_ltd")
+      const r = await mehmet.get("/mukellefler/m_ltd")
       expect(r.json<Mukellef>().unvan).toBe(LTD.unvan)
-      expect((await zeynep.get("/mukellefler/yok")).statusCode).toBe(404)
+      expect((await mehmet.get("/mukellefler/yok")).statusCode).toBe(404)
     })
 
     it("POST kaydı oluşturur, id/tarih atar ve aktivite + sorumluya bildirim yazar", async () => {
-      const r = await zeynep.post("/mukellefler", { ...yeniSahis(), sorumluPersonelId: "p_3" })
+      const r = await mehmet.post("/mukellefler", { ...yeniSahis(), sorumluPersonelId: "p_3" })
       expect(r.statusCode).toBe(201)
       const created = r.json<Mukellef>()
       expect(created.id).toMatch(/^m_/)
       expect(created.olusturmaTarihi).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/)
-      expect((await zeynep.get(`/mukellefler/${created.id}`)).json<Mukellef>().unvan).toBe(
+      expect((await mehmet.get(`/mukellefler/${created.id}`)).json<Mukellef>().unvan).toBe(
         "Yeni Şahıs"
       )
       const loglar = (await aktiviteler("MUKELLEF_OLUSTURULDU")).filter(
@@ -130,7 +130,7 @@ describe("mükellef", () => {
 
     it("formdan gelen ücret yok sayılır; tür dışı kimlik alanları atılır", async () => {
       const ltd = girdi(LTD)
-      const r = await zeynep.post("/mukellefler", {
+      const r = await mehmet.post("/mukellefler", {
         ...ltd,
         unvan: "Yeni Ltd",
         vkn: "1234567890",
@@ -145,22 +145,22 @@ describe("mükellef", () => {
     })
 
     it("aynı TCKN ile ikinci kayıt 409 döner", async () => {
-      const r = await zeynep.post("/mukellefler", { ...yeniSahis(), tckn: "10000000146" })
+      const r = await mehmet.post("/mukellefler", { ...yeniSahis(), tckn: "10000000146" })
       expect(r.statusCode).toBe(409)
       expect(r.json().message).toContain("Ali Veli")
     })
 
     it("geçersiz VKN, bilinmeyen sorumlu, bozuk gövde 400 döner", async () => {
-      const vkn = await zeynep.post("/mukellefler", { ...girdi(LTD), vkn: "0174520663" })
+      const vkn = await mehmet.post("/mukellefler", { ...girdi(LTD), vkn: "0174520663" })
       expect(vkn.statusCode).toBe(400)
       expect(vkn.json().message).toBe("Geçerli bir VKN giriniz")
-      const sorumlu = await zeynep.post("/mukellefler", { ...yeniSahis(), sorumluPersonelId: "p_99" })
+      const sorumlu = await mehmet.post("/mukellefler", { ...yeniSahis(), sorumluPersonelId: "p_99" })
       expect(sorumlu.json()).toEqual({ message: "Sorumlu personel bulunamadı" })
-      const tur = await zeynep.post("/mukellefler", { ...yeniSahis(), tur: "KOOP" })
+      const tur = await mehmet.post("/mukellefler", { ...yeniSahis(), tur: "KOOP" })
       expect(tur.json()).toEqual({ message: "Geçersiz mükellef türü" })
-      const unvan = await zeynep.post("/mukellefler", { ...yeniSahis(), unvan: "  " })
+      const unvan = await mehmet.post("/mukellefler", { ...yeniSahis(), unvan: "  " })
       expect(unvan.json()).toEqual({ message: "Unvan zorunludur" })
-      expect((await zeynep.post("/mukellefler", { tur: "SAHIS" })).statusCode).toBe(400)
+      expect((await mehmet.post("/mukellefler", { tur: "SAHIS" })).statusCode).toBe(400)
     })
 
     it("oturum yoksa 401 döner", async () => {
@@ -169,7 +169,7 @@ describe("mükellef", () => {
     })
 
     it("PUT günceller; kendi VKN'si çakışma sayılmaz, ücret ve oluşturma tarihi korunur", async () => {
-      const r = await zeynep.put("/mukellefler/m_ltd", {
+      const r = await mehmet.put("/mukellefler/m_ltd", {
         ...girdi(LTD),
         unvan: "Çınar Yeni Unvan Ltd. Şti.",
         mersisNo: "",
@@ -186,13 +186,13 @@ describe("mükellef", () => {
 
     it("PUT başka mükellefin VKN'sini alamaz; olmayan kayıt 404", async () => {
       expect(
-        (await zeynep.put("/mukellefler/m_ltd", { ...girdi(LTD), vkn: "9358005601" })).statusCode
+        (await mehmet.put("/mukellefler/m_ltd", { ...girdi(LTD), vkn: "9358005601" })).statusCode
       ).toBe(409)
-      expect((await zeynep.put("/mukellefler/yok", girdi(LTD))).statusCode).toBe(404)
+      expect((await mehmet.put("/mukellefler/yok", girdi(LTD))).statusCode).toBe(404)
     })
 
     it("PUT sorumlu değişince yalnızca yeni sorumluya bildirim gider", async () => {
-      await zeynep.put("/mukellefler/m_ltd", { ...girdi(LTD), sorumluPersonelId: "p_4" })
+      await mehmet.put("/mukellefler/m_ltd", { ...girdi(LTD), sorumluPersonelId: "p_4" })
       const b = await t.db.select().from(bildirim).where(eq(bildirim.mukellefId, "m_ltd"))
       expect(b.map((x) => [x.aliciId, x.baslik])).toEqual([
         ["p_4", "Bir mükellefin sorumlusu oldunuz"],
@@ -200,16 +200,16 @@ describe("mükellef", () => {
     })
 
     it("toplu-atama seçilenlerin sorumlusunu değiştirir, her biri için aktivite yazar", async () => {
-      const r = await zeynep.post("/mukellefler/toplu-atama", {
+      const r = await mehmet.post("/mukellefler/toplu-atama", {
         ids: ["m_sahis", "m_as", "yok"],
         sorumluPersonelId: "p_4",
       })
       expect(r.statusCode).toBe(200)
       expect(r.json()).toEqual({ guncellenen: 2 })
-      expect((await zeynep.get("/mukellefler/m_sahis")).json<Mukellef>().sorumluPersonelId).toBe(
+      expect((await mehmet.get("/mukellefler/m_sahis")).json<Mukellef>().sorumluPersonelId).toBe(
         "p_4"
       )
-      expect((await zeynep.get("/mukellefler/m_ltd")).json<Mukellef>().sorumluPersonelId).toBe(
+      expect((await mehmet.get("/mukellefler/m_ltd")).json<Mukellef>().sorumluPersonelId).toBe(
         "p_3"
       )
       expect(await aktiviteler("MUKELLEF_GUNCELLENDI")).toHaveLength(2)
@@ -217,17 +217,17 @@ describe("mükellef", () => {
 
     it("toplu-atama boş liste veya bilinmeyen personel 400", async () => {
       expect(
-        (await zeynep.post("/mukellefler/toplu-atama", { ids: [], sorumluPersonelId: "p_4" }))
+        (await mehmet.post("/mukellefler/toplu-atama", { ids: [], sorumluPersonelId: "p_4" }))
           .statusCode
       ).toBe(400)
       expect(
-        (await zeynep.post("/mukellefler/toplu-atama", { ids: ["m_ltd"], sorumluPersonelId: "x" }))
+        (await mehmet.post("/mukellefler/toplu-atama", { ids: ["m_ltd"], sorumluPersonelId: "x" }))
           .statusCode
       ).toBe(400)
     })
 
     it("toplu içe aktarım: oluşturur, kayıtlıyı atlar, geçersizi satırıyla raporlar", async () => {
-      const r = await zeynep.post("/mukellefler/toplu", {
+      const r = await mehmet.post("/mukellefler/toplu", {
         kayitlar: [
           { satir: 2, mukellef: yeniSahis() },
           { satir: 3, mukellef: { ...yeniSahis(), unvan: "Tekrar", tckn: "10000000146" } },
@@ -244,7 +244,7 @@ describe("mükellef", () => {
       const [log] = await aktiviteler("MUKELLEF_OLUSTURULDU")
       expect(log?.aciklama).toBe("Yeni Şahıs (içe aktarım)")
       expect(await t.db.select().from(bildirim)).toEqual([])
-      expect((await zeynep.post("/mukellefler/toplu", { kayitlar: [] })).statusCode).toBe(400)
+      expect((await mehmet.post("/mukellefler/toplu", { kayitlar: [] })).statusCode).toBe(400)
     })
 
     it("mükellef sorumlusu olan personel silinemez (409)", async () => {
@@ -255,9 +255,9 @@ describe("mükellef", () => {
     })
 
     it("GET /aktivite mükellefe göre filtreler", async () => {
-      await zeynep.put("/mukellefler/m_ltd", girdi(LTD))
-      await zeynep.put("/mukellefler/m_as", girdi(FIXTURE_MUKELLEFLER[2]!))
-      const items = (await zeynep.get("/aktivite?mukellefId=m_ltd")).json<{ mukellefId: string }[]>()
+      await mehmet.put("/mukellefler/m_ltd", girdi(LTD))
+      await mehmet.put("/mukellefler/m_as", girdi(FIXTURE_MUKELLEFLER[2]!))
+      const items = (await mehmet.get("/aktivite?mukellefId=m_ltd")).json<{ mukellefId: string }[]>()
       expect(items).toHaveLength(1)
       expect(
         await t.db

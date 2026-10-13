@@ -15,6 +15,7 @@ import type {
   CredentialKaydi,
   CredentialTopluRequest,
   CredentialUpdateRequest,
+  KasaAnahtarDegistirRequest,
   KasaMetaResponse,
   SonErisim,
   TopluAktarimSonucu,
@@ -62,7 +63,95 @@ function isEncryptedPayload(body: { cipherText?: unknown; iv?: unknown }) {
   )
 }
 
+/** Kurulum / ana şifre değişimi meta'sı. Gerçek API ayrıca tur sayısı alt sınırı uygular. */
+function gecerliMeta(meta: Partial<KasaMetaResponse> | undefined) {
+  return (
+    !!meta &&
+    typeof meta.salt === "string" &&
+    BASE64.test(meta.salt) &&
+    Number.isInteger(meta.iterations) &&
+    (meta.iterations ?? 0) > 0 &&
+    !!meta.verifier &&
+    isEncryptedPayload(meta.verifier)
+  )
+}
+
+const YALNIZ_YONETICI = "Kasa ana şifresini yalnızca yönetici yönetebilir"
+
 export const kasaHandlers = [
+  /** Demo'da kasa ilk istekte kurulur (`ensureVault`); bu uç yalnızca boş kasada çalışır */
+  http.post<never, KasaMetaResponse>(
+    api("/kasa/kurulum"),
+    async ({ request }) => {
+      const actor = requireActor(request)
+      if (actor instanceof Response) return actor
+      if (actor.rol !== "YONETICI") return errorResponse(403, YALNIZ_YONETICI)
+      const meta = await request.json()
+      if (!gecerliMeta(meta)) return errorResponse(400, "Geçersiz kasa bilgisi")
+      if (db.kasa.count() > 0) return errorResponse(409, "Kasa zaten kurulu")
+      const { salt, iterations, verifier } = meta
+      db.kasa.insert({
+        salt,
+        iterations,
+        verifier,
+        olusturmaTarihi: new Date().toISOString(),
+      })
+      logActivity({ aktorId: actor.id, eylem: "KASA_KURULDU" }, false)
+      return HttpResponse.json({ salt, iterations, verifier }, { status: 201 })
+    }
+  ),
+
+  http.post<never, KasaAnahtarDegistirRequest>(
+    api("/kasa/anahtar-degistir"),
+    async ({ request }) => {
+      await ensureVault()
+      const actor = requireActor(request)
+      if (actor instanceof Response) return actor
+      if (actor.rol !== "YONETICI") return errorResponse(403, YALNIZ_YONETICI)
+      const { meta, kayitlar } = await request.json()
+      if (!gecerliMeta(meta)) return errorResponse(400, "Geçersiz kasa bilgisi")
+      if (
+        !Array.isArray(kayitlar) ||
+        kayitlar.some((k) => typeof k.id !== "string" || !isEncryptedPayload(k))
+      ) {
+        return errorResponse(400, "Şifre şifrelenmiş olarak gönderilmelidir")
+      }
+      const gelen = new Set(kayitlar.map((k) => k.id))
+      const mevcut = db.credential.all()
+      if (
+        gelen.size !== kayitlar.length ||
+        gelen.size !== mevcut.length ||
+        mevcut.some((c) => !gelen.has(c.id))
+      ) {
+        return errorResponse(
+          409,
+          "Kasadaki kayıtlar değişti; sayfayı yenileyip yeniden deneyin"
+        )
+      }
+      const [kasa] = db.kasa.all()
+      db.kasa.update(kasa.id, {
+        salt: meta.salt,
+        iterations: meta.iterations,
+        verifier: meta.verifier,
+      })
+      for (const k of kayitlar)
+        db.credential.update(k.id, { cipherText: k.cipherText, iv: k.iv })
+      logActivity(
+        {
+          aktorId: actor.id,
+          eylem: "KASA_ANAHTARI_DEGISTI",
+          aciklama: `${kayitlar.length} kayıt yeniden şifrelendi`,
+        },
+        false
+      )
+      return HttpResponse.json({
+        salt: meta.salt,
+        iterations: meta.iterations,
+        verifier: meta.verifier,
+      })
+    }
+  ),
+
   http.get(api("/kasa/meta"), async () => {
     await ensureVault()
     const [meta] = db.kasa.all()

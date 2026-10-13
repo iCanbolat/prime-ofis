@@ -26,6 +26,8 @@ const EYLEM_ETIKET: Record<AktiviteEylem, string> = {
   SIFRE_TEBLIGATA_AKTARILDI: "şifreyi e-Tebligat taramasına aktardı",
   SIFRE_GUNCELLENDI: "şifreyi güncelledi",
   SIFRE_SILINDI: "şifreyi sildi",
+  KASA_KURULDU: "şifre kasasını kurdu",
+  KASA_ANAHTARI_DEGISTI: "kasa ana şifresini değiştirdi",
   BEYAN_DURUMU_GUNCELLENDI: "beyan durumunu güncelledi",
   ARSIV_YUKLENDI: "arşive dosya yükledi",
   ARSIV_GUNCELLENDI: "arşiv dosyasını güncelledi",

@@ -5,12 +5,18 @@ import type {
   CredentialKaydi,
   CredentialListParams,
   CredentialUpdateRequest,
+  KasaAnahtarDegistirRequest,
+  KasaKurulumRequest,
   KasaMetaResponse,
   SonErisim,
 } from "@prime/shared/types/api"
 
 export const kasaApi = {
   meta: () => http.get<KasaMetaResponse>("/kasa/meta"),
+  kurulum: (body: KasaKurulumRequest) =>
+    http.post<KasaMetaResponse>("/kasa/kurulum", body),
+  anahtarDegistir: (body: KasaAnahtarDegistirRequest) =>
+    http.post<KasaMetaResponse>("/kasa/anahtar-degistir", body),
   list: (params: CredentialListParams = {}) =>
     http.get<CredentialKaydi[]>("/kasa/credentials", { params: { ...params } }),
   create: (body: CredentialCreateRequest) =>

@@ -29,7 +29,12 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { kasaMetaQuery } from "@/features/kasa/queries"
+import { useAuthStore } from "@/features/auth/store"
+import {
+  AnaSifreDegistirDialog,
+  KasaKurulumDialog,
+} from "@/features/kasa/components/kasa-yonetimi"
+import { kasaMetaQuery, useKasaMeta } from "@/features/kasa/queries"
 import {
   DENEME_BEKLEME_MS,
   MAKS_HATALI_DENEME,
@@ -195,6 +200,32 @@ export function KasaDurumUyarisi() {
   const acik = useKasaAcik()
   const lock = useVaultStore((s) => s.lock)
   const requireKey = useVaultStore((s) => s.requireKey)
+  const yonetici = useAuthStore((s) => s.user?.rol === "YONETICI")
+  const { kurulmamis } = useKasaMeta()
+  const [kurulumAcik, setKurulumAcik] = useState(false)
+  const [degistirAcik, setDegistirAcik] = useState(false)
+
+  if (kurulmamis) {
+    return (
+      <Alert>
+        <HugeiconsIcon icon={SquareLock02Icon} strokeWidth={2} />
+        <AlertTitle>Şifre kasası kurulmadı</AlertTitle>
+        <AlertDescription>
+          {yonetici
+            ? "Mükellef şifrelerini saklamak için önce kasa ana şifresini belirleyin."
+            : "Kasayı büro yöneticisi kurmalıdır."}
+        </AlertDescription>
+        {yonetici && (
+          <AlertAction>
+            <Button size="sm" onClick={() => setKurulumAcik(true)}>
+              Kasayı kur
+            </Button>
+          </AlertAction>
+        )}
+        <KasaKurulumDialog open={kurulumAcik} onOpenChange={setKurulumAcik} />
+      </Alert>
+    )
+  }
 
   return acik ? (
     <Alert>
@@ -204,11 +235,24 @@ export function KasaDurumUyarisi() {
         Şifreleri görüntüleyebilir ve kopyalayabilirsiniz. Her erişim kayıt
         altına alınır.
       </AlertDescription>
-      <AlertAction>
+      <AlertAction className="flex gap-2">
+        {yonetici && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setDegistirAcik(true)}
+          >
+            Ana şifreyi değiştir
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={lock}>
           Kasayı kilitle
         </Button>
       </AlertAction>
+      <AnaSifreDegistirDialog
+        open={degistirAcik}
+        onOpenChange={setDegistirAcik}
+      />
     </Alert>
   ) : (
     <Alert>

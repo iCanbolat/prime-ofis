@@ -1,5 +1,6 @@
 /** API istek/yanıt sözleşmeleri. MSW handler'ları ve feature api katmanı ortak kullanır. */
 import type {
+  EncryptedPayload,
   BorcKalemi,
   BorcuYokturDurum,
   BorcuYokturTalebi,
@@ -188,6 +189,18 @@ export interface BildirimListResponse {
 }
 
 export type KasaMetaResponse = Omit<KasaMeta, "id" | "olusturmaTarihi">
+
+/** Kasa kurulumu (yönetici): istemcide ana şifreden türetilen salt / tur / doğrulayıcı */
+export type KasaKurulumRequest = KasaMetaResponse
+
+/**
+ * Ana şifre değişimi (yönetici): yeni meta + tüm kayıtların istemcide yeni anahtarla
+ * şifrelenmiş hâli. Kayıt kümesi sunucudakiyle birebir olmalı (aksi 409).
+ */
+export interface KasaAnahtarDegistirRequest {
+  meta: KasaMetaResponse
+  kayitlar: ({ id: string } & EncryptedPayload)[]
+}
 
 export interface SonErisim {
   eylem: AktiviteEylem

@@ -4,6 +4,7 @@ import { aktiviteKeys } from "@/features/aktivite/queries"
 import { arsivKeys } from "@/features/arsiv/queries"
 import { gorevKeys } from "@/features/gorev/queries"
 import { iceAktarimApi } from "@/features/ice-aktarim/api"
+import { kasaAnahtariGuncelMi } from "@/features/kasa/queries"
 import { takvimKeys } from "@/features/takvim/queries"
 import type {
   AcilisTopluRequest,
@@ -94,9 +95,10 @@ export const useMukellefTopluAktar = () =>
   )
 
 export const useSifreTopluAktar = () =>
-  useTopluAktarim((body: CredentialTopluRequest) =>
-    iceAktarimApi.sifreToplu(body)
-  )
+  useTopluAktarim(async (body: CredentialTopluRequest) => {
+    await kasaAnahtariGuncelMi()
+    return iceAktarimApi.sifreToplu(body)
+  })
 
 export const useAcilisTopluAktar = () =>
   useTopluAktarim((body: AcilisTopluRequest) => iceAktarimApi.acilisToplu(body))
