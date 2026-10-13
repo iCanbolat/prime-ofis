@@ -13,6 +13,7 @@ import { DbModule } from "./db/db.module.js"
 import { DevModule } from "./dev/dev.module.js"
 import { SeedModule } from "./dev/seed.module.js"
 import { DosyaModule } from "./dosya/dosya.module.js"
+import { EBelgeModule } from "./e-belge/e-belge.module.js"
 import { EvrakModule } from "./evrak/evrak.module.js"
 import { GorevModule } from "./gorev/gorev.module.js"
 import { HatirlatmaModule } from "./hatirlatma/hatirlatma.module.js"
@@ -92,6 +93,7 @@ export class AppModule {
         TahsilatModule,
         KanalModule,
         HatirlatmaModule,
+        EBelgeModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),
       ],

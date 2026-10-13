@@ -64,6 +64,13 @@
       "when": 1791923558483,
       "tag": "0008_faz6_kanal",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791924525882,
+      "tag": "0009_faz7_e_belge",
+      "breakpoints": true
     }
   ]
 }

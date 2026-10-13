@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { KULLANILAN_KANALLAR } from "@/features/kanal/api"
 import { useGonderimTekrar, useGonderimler } from "@/features/kanal/queries"
 import {
   GONDERIM_DURUM_ETIKET,
@@ -31,7 +32,10 @@ import type { GonderimDurumu, KanalTip } from "@prime/shared/types/domain"
 
 const SAYFA_BOYUTU = 20
 const DURUMLAR = Object.keys(GONDERIM_DURUM_ETIKET) as GonderimDurumu[]
-const KANALLAR = Object.keys(KANAL_ETIKET) as KanalTip[]
+const KANALLAR = KULLANILAN_KANALLAR
+const KANAL_SECENEKLERI = Object.fromEntries(
+  KANALLAR.map((k) => [k, KANAL_ETIKET[k]])
+) as Record<KanalTip, string>
 
 const DURUM_RENK: Record<GonderimDurumu, string> = {
   KUYRUKTA: "bg-sky-500/15 text-sky-800 dark:text-sky-300",
@@ -75,7 +79,7 @@ export function GonderimlerPage() {
         arama={
           <SekmeFiltre
             etiket="Kanal"
-            secenekler={KANAL_ETIKET}
+            secenekler={KANAL_SECENEKLERI}
             value={kanal}
             onChange={(v) => ayarla({ kanal: v })}
           />

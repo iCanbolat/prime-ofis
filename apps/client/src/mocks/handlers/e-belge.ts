@@ -14,6 +14,15 @@ import {
 } from "@prime/shared/e-belge/kurallar"
 import type { EntegratorKimlik } from "@prime/shared/e-belge/entegrator-adapter"
 import {
+  baglantiHatasi,
+  EBELGE_DONEM_RE,
+  EBELGE_TURLERI,
+  EBELGE_YONLERI,
+  faturaFiltreHatasi,
+  kontorAlimHatasi,
+  yanitHatasi,
+} from "@prime/shared/e-belge/girdi"
+import {
   kontorBakiyesi,
   mukellefTuketimleri,
   sonDonemler,
@@ -60,17 +69,12 @@ import type {
   GibDurumu,
   Mukellef,
   EntegratorBaglanti,
-  EntegratorOrtam,
   Personel,
 } from "@prime/shared/types/domain"
 
-const TURLER: EBelgeTur[] = ["E_FATURA", "E_ARSIV"]
-const YONLER: EBelgeYon[] = ["GELEN", "GIDEN"]
-const GIB_DURUMLARI: GibDurumu[] = ["BASARILI", "ISLENIYOR", "HATA", "IPTAL"]
-const YANITLAR: EFaturaYanit[] = ["BEKLIYOR", "KABUL", "RED", "SURESI_DOLDU"]
-const ORTAMLAR: EntegratorOrtam[] = ["TEST", "CANLI"]
-const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
-const DONEM_RE = /^\d{4}-(0[1-9]|1[0-2])$/
+const TURLER = EBELGE_TURLERI
+const YONLER = EBELGE_YONLERI
+const DONEM_RE = EBELGE_DONEM_RE
 
 function baglantiView(m: Mukellef): EntegratorBaglantiView {
   const kayit = db.baglanti.where((b) => b.mukellefId === m.id)[0]
@@ -261,10 +265,9 @@ export const eBelgeHandlers = [
       const m = db.mukellef.find(params.mukellefId)
       if (!m) return notFound("Mükellef bulunamadı")
       const body = await request.json()
-      const anahtar = body.apiAnahtari?.trim() ?? ""
-      if (!anahtar) return errorResponse(400, "Web servis anahtarı zorunludur")
-      if (!ORTAMLAR.includes(body.ortam))
-        return errorResponse(400, "Geçersiz ortam")
+      const hata = baglantiHatasi(body)
+      if (hata) return errorResponse(400, hata)
+      const anahtar = body.apiAnahtari.trim()
 
       const dogrulama = await adapter.baglantiDogrula({
         mukellefId: m.id,
@@ -408,17 +411,15 @@ export const eBelgeHandlers = [
     const artan = p("siralamaYonu") === "asc"
     const tutaraGore = p("sirala") === "toplam"
 
-    if (tur && !TURLER.includes(tur)) return errorResponse(400, "Geçersiz tür")
-    if (yon && !YONLER.includes(yon)) return errorResponse(400, "Geçersiz yön")
-    if (gib && !GIB_DURUMLARI.includes(gib))
-      return errorResponse(400, "Geçersiz GİB durumu")
-    if (yanitF && !YANITLAR.includes(yanitF))
-      return errorResponse(400, "Geçersiz yanıt durumu")
-    if (
-      (baslangic && !YMD_RE.test(baslangic)) ||
-      (bitis && !YMD_RE.test(bitis))
-    )
-      return errorResponse(400, "Geçersiz tarih")
+    const filtreHatasi = faturaFiltreHatasi({
+      tur,
+      yon,
+      gibDurumu: gib,
+      yanit: yanitF,
+      baslangic,
+      bitis,
+    })
+    if (filtreHatasi) return errorResponse(400, filtreHatasi)
 
     const simdi = new Date()
     const filtreli = db.ebelge
@@ -525,11 +526,9 @@ export const eBelgeHandlers = [
             : "Bu fatura zaten yanıtlanmış"
         )
       const body = await request.json()
-      if (body.karar !== "KABUL" && body.karar !== "RED")
-        return errorResponse(400, "Geçersiz karar")
+      const yanitHata = yanitHatasi(body)
+      if (yanitHata) return errorResponse(400, yanitHata)
       const neden = body.neden?.trim()
-      if (body.karar === "RED" && !neden)
-        return errorResponse(400, "Red nedeni zorunludur")
       const b = db.baglanti.where((n) => n.mukellefId === e.mukellefId)[0]
       if (b?.durum !== "BAGLI")
         return errorResponse(409, "Mükellefin Luca bağlantısı aktif değil")
@@ -694,14 +693,8 @@ export const eBelgeHandlers = [
           "Kontör alımını yalnızca yönetici kaydedebilir"
         )
       const body = await request.json()
-      const tamSayi = (n: unknown, min: number) =>
-        Number.isInteger(n) && (n as number) >= min
-      if (!YMD_RE.test(body.tarih ?? "") || body.tarih > bugun())
-        return errorResponse(400, "Geçersiz tarih")
-      if (!tamSayi(body.paketAdet, 1) || !tamSayi(body.hediyeAdet, 0))
-        return errorResponse(400, "Kontör adedi geçersiz")
-      if (typeof body.tutar !== "number" || !(body.tutar >= 0))
-        return errorResponse(400, "Tutar geçersiz")
+      const alimHatasi = kontorAlimHatasi(body, bugun())
+      if (alimHatasi) return errorResponse(400, alimHatasi)
 
       const kayit = db.kontor.insert({
         tarih: body.tarih,
