@@ -26,6 +26,7 @@ import {
   useKanalTest,
   useKanallar,
 } from "@/features/kanal/queries"
+import { KULLANILAN_KANALLAR } from "@/features/kanal/api"
 import {
   KANAL_DURUM_ETIKET,
   KANAL_ETIKET,
@@ -218,7 +219,7 @@ export function KanallarPage() {
         karakteri görünür. SMS kullanılmaz.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
-        {(["EPOSTA", "TELEGRAM", "WHATSAPP"] as const).map((tip) => (
+        {KULLANILAN_KANALLAR.map((tip) => (
           <KanalKarti
             key={tip}
             tip={tip}

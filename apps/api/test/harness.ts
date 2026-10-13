@@ -15,6 +15,9 @@ import { DB, type Veritabani } from "../src/db/db.module.js"
 import { SeedYukleyici } from "../src/dev/seed-yukleyici.js"
 import { BellekDosyaDeposu, DosyaDeposu } from "../src/storage/dosya-deposu.js"
 
+/** Kanal / entegratör gizli değerleri için sabit test anahtarı */
+export const TEST_ANAHTARI = Buffer.alloc(32, 7).toString("base64")
+
 export interface TestUygulamasi {
   app: NestFastifyApplication
   db: Veritabani
@@ -59,6 +62,7 @@ export async function testUygulamasi(
         S3_ACCESS_KEY: "test",
         S3_SECRET_KEY: "test",
         JOB_WORKERS: "false",
+        SECRET_KEY: TEST_ANAHTARI,
         ...ortam,
       }),
     ],
@@ -68,7 +72,8 @@ export async function testUygulamasi(
     .compile()
 
   const app = modul.createNestApplication<NestFastifyApplication>(
-    fastifyAdapter()
+    fastifyAdapter(),
+    { rawBody: true }
   )
   await uygulamayiYapilandir(app)
   await app.init()

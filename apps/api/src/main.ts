@@ -20,7 +20,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot(),
     fastifyAdapter(),
-    { bufferLogs: true }
+    { bufferLogs: true, rawBody: true }
   )
   await uygulamayiYapilandir(app)
   await app.listen(env.PORT, env.HOST)

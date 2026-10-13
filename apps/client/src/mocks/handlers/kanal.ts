@@ -4,9 +4,13 @@
  */
 import { HttpResponse, http } from "msw"
 
-import { BILDIRIM_GORUNUM } from "@/features/bildirim/gorunum"
-import { SABLON_TIPLERI } from "@prime/shared/evrak-talebi/mesaj"
 import { KANAL_ETIKET as TALEP_KANAL_ETIKET } from "@prime/shared/evrak-talebi/sabitler"
+import {
+  KANAL_TIPLERI,
+  kanalKaydiHazirla,
+  mukellefGonderHatasi,
+  tercihHatasi,
+} from "@prime/shared/kanal/girdi"
 import { VARSAYILAN_TERCIH, kanalHazir } from "@prime/shared/kanal/kurallar"
 import { KANAL_ETIKET } from "@prime/shared/kanal/sabitler"
 import { db } from "@/mocks/db"
@@ -42,9 +46,7 @@ import type {
   TalepKanal,
 } from "@prime/shared/types/domain"
 
-const KANALLAR: KanalTip[] = ["EPOSTA", "TELEGRAM", "WHATSAPP"]
-const KATEGORILER = Object.keys(BILDIRIM_GORUNUM)
-const EPOSTA_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const KANALLAR = KANAL_TIPLERI
 
 const yoneticiMi = (p: Personel) => p.rol === "YONETICI"
 
@@ -54,81 +56,6 @@ function kanallarYaniti(): KanallarResponse {
     TELEGRAM: kanalAyari("TELEGRAM") ?? null,
     WHATSAPP: kanalAyari("WHATSAPP") ?? null,
   }
-}
-
-/** Kaydetme isteğini doğrular; gizli değer ve kaydedilecek (gizlisiz) ayar döner */
-function kanalKaydiHazirla(
-  body: KanalKaydetRequest,
-  mevcut: KanalAyari | undefined
-):
-  | {
-      ayar: Omit<KanalAyari, "gizliIpucu" | "durum"> & Partial<KanalAyari>
-      gizli?: string
-    }
-  | string {
-  const temel = { id: body.tip, aktif: Boolean(body.aktif) }
-  if (body.tip === "EPOSTA") {
-    if (!body.sunucu?.trim()) return "SMTP sunucusu zorunludur"
-    if (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)
-      return "Geçerli bir port girin"
-    if (!body.kullanici?.trim()) return "Kullanıcı adı zorunludur"
-    if (!EPOSTA_RE.test(body.gonderenAdres ?? ""))
-      return "Geçerli bir gönderen adresi girin"
-    if (!mevcut && !body.sifre) return "SMTP şifresi zorunludur"
-    return {
-      ayar: {
-        ...temel,
-        tip: "EPOSTA",
-        sunucu: body.sunucu.trim(),
-        port: body.port,
-        guvenlik: body.guvenlik === "TLS" ? "TLS" : "STARTTLS",
-        kullanici: body.kullanici.trim(),
-        gonderenAd: body.gonderenAd?.trim() || body.gonderenAdres,
-        gonderenAdres: body.gonderenAdres.trim(),
-      },
-      gizli: body.sifre || undefined,
-    }
-  }
-  if (body.tip === "TELEGRAM") {
-    const bot = body.botKullaniciAdi?.trim().replace(/^@/, "")
-    if (!bot || !/^\w{5,32}bot$/i.test(bot))
-      return "Bot kullanıcı adı 'bot' ile bitmeli (ör. PrimeOfisBot)"
-    if (!mevcut && !body.token) return "Bot token zorunludur"
-    if (body.token && !/^\d+:[\w-]{20,}$/.test(body.token))
-      return "Token BotFather'ın verdiği biçimde olmalı (123456:ABC…)"
-    return {
-      ayar: { ...temel, tip: "TELEGRAM", botKullaniciAdi: bot },
-      gizli: body.token || undefined,
-    }
-  }
-  if (body.tip === "WHATSAPP") {
-    if (!/^\d{6,20}$/.test(body.telefonNumarasiId ?? ""))
-      return "Telefon numarası kimliği (Phone number ID) rakamlardan oluşmalı"
-    if (!/^\d{6,20}$/.test(body.wabaId ?? ""))
-      return "WhatsApp Business hesap kimliği (WABA ID) rakamlardan oluşmalı"
-    if (!body.gorunenNumara?.trim()) return "Görünen numara zorunludur"
-    if (!mevcut && !body.erisimAnahtari)
-      return "Kalıcı erişim anahtarı zorunludur"
-    const sablonlar: Record<string, string> = Object.fromEntries(
-      Object.entries(body.sablonlar ?? {})
-        .map(([k, v]): [string, string] => [k, String(v ?? "").trim()])
-        .filter(([, v]) => v)
-    )
-    if (Object.values(sablonlar).some((v) => !/^[a-z0-9_]{1,512}$/.test(v)))
-      return "Şablon adları küçük harf, rakam ve alt çizgiden oluşmalı"
-    return {
-      ayar: {
-        ...temel,
-        tip: "WHATSAPP",
-        telefonNumarasiId: body.telefonNumarasiId,
-        wabaId: body.wabaId,
-        gorunenNumara: body.gorunenNumara.trim(),
-        sablonlar,
-      },
-      gizli: body.erisimAnahtari || undefined,
-    }
-  }
-  return "Geçersiz kanal"
 }
 
 function tercihView(p: Personel): BildirimTercihView {
@@ -178,7 +105,7 @@ export const kanalHandlers = [
       if (body.tip !== params.tip)
         return errorResponse(400, "Kanal tipi uyuşmuyor")
       const mevcut = kanalAyari(params.tip)
-      const hazir = kanalKaydiHazirla(body, mevcut)
+      const hazir = kanalKaydiHazirla(body, Boolean(mevcut))
       if (typeof hazir === "string") return errorResponse(400, hazir)
 
       const ayar = {
@@ -285,14 +212,8 @@ export const kanalHandlers = [
       const actor = requireActor(request)
       if (actor instanceof Response) return actor
       const { kanallar } = await request.json()
-      if (!kanallar || typeof kanallar !== "object")
-        return errorResponse(400, "Tercih bulunamadı")
-      for (const [k, v] of Object.entries(kanallar)) {
-        if (!KATEGORILER.includes(k))
-          return errorResponse(400, "Geçersiz kategori")
-        if (!Array.isArray(v) || v.some((t) => !KANALLAR.includes(t)))
-          return errorResponse(400, "Geçersiz kanal")
-      }
+      const hata = tercihHatasi(kanallar)
+      if (hata) return errorResponse(400, hata)
       tercihYaz(actor, { kanallar })
       return HttpResponse.json(tercihView(actor))
     }
@@ -439,20 +360,8 @@ export const kanalHandlers = [
       const actor = requireActor(request)
       if (actor instanceof Response) return actor
       const body = await request.json()
-      if (!SABLON_TIPLERI.includes(body.sablon))
-        return errorResponse(400, "Geçersiz mesaj türü")
-      if (body.kanal && body.kanal !== "WHATSAPP" && body.kanal !== "EPOSTA")
-        return errorResponse(
-          400,
-          "Mükellefe yalnızca WhatsApp veya e-posta ile gönderilir"
-        )
-      if (!Array.isArray(body.hedefler) || body.hedefler.length === 0)
-        return errorResponse(400, "En az bir mükellef seçin")
-      if (body.hedefler.length > 200)
-        return errorResponse(
-          400,
-          "Tek seferde en fazla 200 mükellefe gönderilir"
-        )
+      const hata = mukellefGonderHatasi(body)
+      if (hata) return errorResponse(400, hata)
 
       // Borç hatırlatması bu ayın ücret borcu oluşmuş haliyle hesaplansın
       if (body.sablon === "BORC_HATIRLATMA") ucretBorclariniUret()

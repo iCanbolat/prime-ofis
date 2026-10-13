@@ -57,6 +57,13 @@
       "when": 1791913659186,
       "tag": "0007_faz5_tahsilat",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791923558483,
+      "tag": "0008_faz6_kanal",
+      "breakpoints": true
     }
   ]
 }

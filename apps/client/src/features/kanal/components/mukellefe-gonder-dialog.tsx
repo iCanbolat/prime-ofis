@@ -36,6 +36,7 @@ type KanalSecim = MukellefKanal | "TERCIH"
 
 const DURUM_RENK: Record<string, string> = {
   GONDERILDI: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
+  KUYRUKTA: "bg-sky-500/15 text-sky-800 dark:text-sky-300",
   ELLE: "bg-sky-500/15 text-sky-800 dark:text-sky-300",
   HATA: "bg-destructive/10 text-destructive",
 }
@@ -152,10 +153,11 @@ function Icerik({
             sonuclar.filter((s) => s.durum === d).length
           const parcalar = [
             say("GONDERILDI") && `${say("GONDERILDI")} gönderildi`,
+            say("KUYRUKTA") && `${say("KUYRUKTA")} gönderim kuyruğunda`,
             say("ELLE") && `${say("ELLE")} elle gönderilecek`,
             say("HATA") && `${say("HATA")} hatalı`,
           ].filter(Boolean)
-          if (say("HATA") && !say("GONDERILDI") && !say("ELLE"))
+          if (say("HATA") && say("HATA") === sonuclar.length)
             toast.error(parcalar.join(", "))
           else toast.success(parcalar.join(", "))
           // Tek ve elle gönderilecekse bağlantı hemen açılır

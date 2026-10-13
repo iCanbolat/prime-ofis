@@ -1,4 +1,4 @@
-import { http } from "@/lib/http"
+import { MOCK_MODU, http } from "@/lib/http"
 import type {
   BildirimTercihKaydetRequest,
   BildirimTercihView,
@@ -12,6 +12,11 @@ import type {
   TelegramBaglamaResponse,
 } from "@prime/shared/types/api"
 import type { Gonderim, KanalAyari, KanalTip } from "@prime/shared/types/domain"
+
+/** Kullanılabilen kanallar: Telegram gerçek backend'de henüz yok (yalnızca mock / demo) */
+export const KULLANILAN_KANALLAR: KanalTip[] = MOCK_MODU
+  ? ["EPOSTA", "TELEGRAM", "WHATSAPP"]
+  : ["EPOSTA", "WHATSAPP"]
 
 export const kanalApi = {
   kanallar: () => http.get<KanallarResponse>("/kanallar"),

@@ -31,13 +31,14 @@ import {
   useTelegramKaldir,
   useTercihKaydet,
 } from "@/features/kanal/queries"
+import { KULLANILAN_KANALLAR } from "@/features/kanal/api"
 import { KANAL_ETIKET } from "@prime/shared/kanal/sabitler"
 import { formatPhone } from "@prime/shared/lib/format"
 import type { BildirimTercihView } from "@prime/shared/types/api"
 import type { KanalTip } from "@prime/shared/types/domain"
 
 const KATEGORILER = Object.keys(BILDIRIM_GORUNUM) as BildirimKategori[]
-const KANALLAR: KanalTip[] = ["EPOSTA", "TELEGRAM", "WHATSAPP"]
+const KANALLAR = KULLANILAN_KANALLAR
 
 function TelegramKarti({
   t,
@@ -157,7 +158,11 @@ export function BildirimlerimPage() {
           <CardTitle>Bildirim kanallarım</CardTitle>
           <CardDescription>
             Uygulama içi bildirimler her zaman açıktır. Kaçırmak istemediğiniz
-            bildirimleri ayrıca e-posta, Telegram veya WhatsApp'tan alın.
+            bildirimleri ayrıca{" "}
+            {KANALLAR.includes("TELEGRAM")
+              ? "e-posta, Telegram veya WhatsApp'tan"
+              : "e-posta veya WhatsApp'tan"}{" "}
+            alın.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -220,7 +225,9 @@ export function BildirimlerimPage() {
           </p>
         </CardContent>
       </Card>
-      <TelegramKarti t={t} hazir={kanalHazir(k.TELEGRAM)} />
+      {KANALLAR.includes("TELEGRAM") && (
+        <TelegramKarti t={t} hazir={kanalHazir(k.TELEGRAM)} />
+      )}
     </>
   )
 }

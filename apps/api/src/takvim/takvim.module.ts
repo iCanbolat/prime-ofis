@@ -10,6 +10,6 @@ import { TakvimService } from "./takvim.service.js"
   imports: [SeedModule],
   controllers: [TakvimController],
   providers: [TakvimService, BeyanDurumuService],
-  exports: [BeyanDurumuService],
+  exports: [BeyanDurumuService, TakvimService],
 })
 export class TakvimModule {}

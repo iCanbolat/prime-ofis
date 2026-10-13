@@ -49,6 +49,15 @@ export const envSchema = z
     /** `POST /api/dev/reset` gibi geliştirici uçları (yalnızca geliştirme / demo) */
     DEV_ARACLARI: bool.default(false),
 
+    /** Dış kanal sağlayıcısı; verilmezse production'da `gercek`, diğerlerinde `mock` */
+    KANAL_ADAPTER: z.enum(["mock", "gercek"]).optional(),
+    /** Meta uygulama gizli anahtarı (webhook `X-Hub-Signature-256` doğrulaması) */
+    WHATSAPP_APP_SECRET: z.string().min(1).optional(),
+    /** Meta webhook abonelik doğrulaması (`hub.verify_token`) */
+    WHATSAPP_VERIFY_TOKEN: z.string().min(1).optional(),
+    /** e-Belge entegratörü; Luca uygulaması doküman gelene kadar iskelet */
+    ENTEGRATOR: z.enum(["mock", "luca"]).default("mock"),
+
     CLAUDE_API_KEY: z.string().optional(),
     CLAUDE_MODEL: z.string().optional(),
   })

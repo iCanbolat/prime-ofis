@@ -94,4 +94,9 @@ export interface GizliKolon {
   kolon: string
 }
 
-export const GIZLI_KOLONLAR: GizliKolon[] = []
+export const GIZLI_KOLONLAR: GizliKolon[] = [
+  { tablo: "kanal_ayari", idKolonu: "tip", kolon: "gizli" },
+]
+
+/** Kanal / entegratör ayarlarında gösterilen ipucu: düz son 4 karakter (client `••••` ekler) */
+export const sonDort = (acik: string) => acik.slice(-4)

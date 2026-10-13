@@ -29,13 +29,12 @@ export interface BildirimCozucu {
   ): Promise<{ alici?: string | null; baglam?: LinkBaglami } | undefined>
 }
 
-/** Bildirim eklendikten sonra dış kanallara (e-posta, Telegram, WhatsApp) gönderim — Faz 6 */
-export abstract class BildirimGonderimKancasi {
-  abstract eklendi(bildirimler: Bildirim[]): Promise<void>
-}
-
-export class BosGonderimKancasi extends BildirimGonderimKancasi {
-  async eklendi() {}
+/**
+ * Bildirim eklendikten sonra dış kanallara (e-posta, WhatsApp) gönderim. Kanal modülü
+ * `gonderimKancasiAyarla` ile kaydeder; çağıranın transaction'ında outbox satırı yazar.
+ */
+export interface BildirimGonderimKancasi {
+  eklendi(bildirimler: Bildirim[]): Promise<void>
 }
 
 const LISTE_VARSAYILAN = 30
@@ -44,11 +43,30 @@ const LISTE_EN_FAZLA = 100
 @Injectable()
 export class BildirimService {
   private readonly cozuculer: BildirimCozucu[] = []
+  private kanca: BildirimGonderimKancasi | null = null
 
-  constructor(
-    private readonly txHost: TransactionHost<DrizzleTx>,
-    private readonly kanca: BildirimGonderimKancasi
-  ) {}
+  constructor(private readonly txHost: TransactionHost<DrizzleTx>) {}
+
+  gonderimKancasiAyarla(kanca: BildirimGonderimKancasi) {
+    this.kanca = kanca
+  }
+
+  /**
+   * Hazır bildirim satırlarını yazar ve dış kanallar için kuyruğa alır. Aynı `anahtar` ile
+   * daha önce yazılmış hatırlatma atlanır; eklenenler döner.
+   */
+  async ekle(satirlar: Bildirim[]): Promise<Bildirim[]> {
+    if (!satirlar.length) return []
+    const eklenen = await this.txHost.tx
+      .insert(bildirim)
+      .values(satirlar)
+      .onConflictDoNothing()
+      .returning({ id: bildirim.id })
+    const idler = new Set(eklenen.map((b) => b.id))
+    const yeni = satirlar.filter((b) => idler.has(b.id))
+    if (yeni.length) await this.kanca?.eklendi(yeni)
+    return yeni
+  }
 
   cozucuEkle(cozucu: BildirimCozucu) {
     this.cozuculer.push(cozucu)
@@ -91,9 +109,7 @@ export class BildirimService {
         zaman: log.zaman,
         okuyanlar: aliciId === null ? [log.aktorId] : [],
       }))
-    if (!satirlar.length) return []
-    await this.txHost.tx.insert(bildirim).values(satirlar)
-    await this.kanca.eklendi(satirlar)
+    await this.ekle(satirlar)
     return satirlar
   }
 
