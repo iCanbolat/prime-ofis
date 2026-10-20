@@ -5,28 +5,23 @@
  * tanımlı her mükellef adına GİB e-Tebligat kutusuna giriş yapar, son başarılı taramadan sonra
  * düşen belgeleri listeler ve `/api/tebligat` kayıtlarına işler; personel sabah işe geldiğinde
  * tebligatlar, süreleri ve bildirimleri hazırdır. Frontend GİB'e erişmez; yalnızca
- * `/api/tebligat/*` uçlarını bilir. Geliştirmede MSW handler'ları bu arayüzün mock uygulamasını
- * (`mocks/gib/mock-adapter.ts`) kullanır.
+ * `/api/tebligat/*` ve `/api/kamu-dogrulama` uçlarını bilir. Geliştirmede MSW handler'ları bu
+ * arayüzün mock uygulamasını (`@prime/mock-data/gib-tebligat`) kullanır.
  *
  * Kurallar:
- * - Şifre yalnızca backend'de (KMS ile şifreli) tutulur; yanıtlarda dönmez.
+ * - Giriş, borç / levha sorgularıyla aynı İnteraktif VD oturumudur: `KamuSorguAdapter.giris`
+ *   (`kurum: "GIB"`) açar, bu adaptör yalnızca açık oturumla kutuyu okur.
+ * - **Doğrulama ekranı (CAPTCHA) otomatik geçilmez.** Giriş `DOGRULAMA` dönerse gece işi o
+ *   mükellefi atlar, `KamuDogrulama` kaydı (`TEBLIGAT` adımı) açılır; personel kodu girince tarama
+ *   aynı oturumla sürer.
+ * - Şifre yalnızca backend'de (şifreli) tutulur; yanıtlarda dönmez.
  * - Kutu salt okunur gezilir: belge silinmez, mükellef adına işlem yapılmaz.
  * - Girişi başarısız olan mükellef, hesap kilitlenmesin diye şifre güncellenene kadar gece
  *   denenmez; personel elle "Yeniden dene" ile tek deneme yapabilir.
  * - Tebliğ tarihi belgenin açılmasına değil ulaşma tarihine bağlıdır (ulaşmayı izleyen 5. gün).
  */
+import type { KamuOturum } from "../borc/kamu-adapter"
 import type { TebligatKurum } from "../types/domain"
-
-export interface GibKimlik {
-  kullaniciKodu: string
-  /** Yalnızca backend'de çözülür */
-  sifre: string
-}
-
-export interface GibGirisSonucu {
-  gecerli: boolean
-  hataMesaji?: string
-}
 
 /** e-Tebligat kutusundaki bir belgenin liste satırı */
 export interface GibTebligatBelgesi {
@@ -44,13 +39,13 @@ export interface GibTebligatBelgesi {
 
 export type GibTaramaSonucu =
   | { gecerli: true; belgeler: GibTebligatBelgesi[] }
+  /** Oturum açıkken kutu okunamadı (ör. şifre süresi doldu); erişim HATA'ya düşer */
   | { gecerli: false; hataMesaji: string }
 
 export interface GibTebligatAdapter {
-  girisDogrula(kimlik: GibKimlik): Promise<GibGirisSonucu>
   /** `sonrasi` anından sonra ulaşan belgeler, eskiden yeniye */
   yeniBelgeler(
-    kimlik: GibKimlik,
+    oturum: KamuOturum,
     sonrasi: string | undefined
   ): Promise<GibTaramaSonucu>
 }

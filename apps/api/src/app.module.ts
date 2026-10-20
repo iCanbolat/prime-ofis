@@ -14,6 +14,7 @@ import { DevModule } from "./dev/dev.module.js"
 import { SeedModule } from "./dev/seed.module.js"
 import { DosyaModule } from "./dosya/dosya.module.js"
 import { EBelgeModule } from "./e-belge/e-belge.module.js"
+import { TebligatModule } from "./tebligat/tebligat.module.js"
 import { EvrakModule } from "./evrak/evrak.module.js"
 import { GorevModule } from "./gorev/gorev.module.js"
 import { HatirlatmaModule } from "./hatirlatma/hatirlatma.module.js"
@@ -94,6 +95,7 @@ export class AppModule {
         KanalModule,
         HatirlatmaModule,
         EBelgeModule,
+        TebligatModule,
         SeedModule,
         ...(env.DEV_ARACLARI ? [DevModule] : []),
       ],

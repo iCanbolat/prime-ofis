@@ -1060,6 +1060,8 @@ export interface TebligatErisimSatiri {
   kasaKaydiId?: string
   /** Erişim kasadan aktarıldıktan sonra kasadaki kayıt güncellendi */
   kasaDahaYeni: boolean
+  /** GİB girişi doğrulama kodu bekliyor; personel kodu girene kadar taranmaz */
+  dogrulama: KamuDogrulamaView | null
 }
 
 export interface TebligatErisimListParams {
@@ -1081,6 +1083,8 @@ export interface TebligatErisimKaydetRequest {
 export interface TebligatMukellefTaraResponse {
   yeni: number
   erisim: TebligatErisim
+  /** Giriş doğrulama kodu istedi: tarama kod girilince sürer (`yeni` 0) */
+  dogrulama: KamuDogrulamaView | null
 }
 
 // --- Gönderim kanalları --------------------------------------------------------------

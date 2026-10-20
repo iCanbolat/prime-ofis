@@ -61,6 +61,7 @@ export const BORCU_YOKTUR_ETIKET: Record<BorcuYokturGorunum, string> = {
 }
 
 export const KAMU_ADIM_ETIKET: Record<KamuAdim, string> = {
+  TEBLIGAT: "e-Tebligat taraması",
   VERGI_LEVHASI: "Vergi levhası",
   BORC: "Borç sorgusu",
   BORCU_YOKTUR: "Borcu yoktur yazısı",

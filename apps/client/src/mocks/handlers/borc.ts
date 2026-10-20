@@ -12,7 +12,6 @@ import { addMinutes } from "date-fns"
 import { HttpResponse, http } from "msw"
 
 import type {
-  KamuKimlik,
   KamuOturum,
   KamuSorguAdapter,
 } from "@prime/shared/borc/kamu-adapter"
@@ -44,7 +43,17 @@ import {
   turkishIncludes,
 } from "@/mocks/handlers/common"
 import { SISTEM_AKTOR } from "@/mocks/handlers/tahsilat"
-import { sonGeceTaramaAni } from "@/mocks/handlers/tebligat"
+import { sonGeceTaramaAni, tebligatlariOku } from "@/mocks/handlers/tebligat"
+import {
+  dogrulamaBul,
+  dogrulamaView,
+  erisimDurumu,
+  erisimHatasi,
+  gibErisimBul,
+  kimlikBul,
+  oturumAc,
+  sgkErisimBul,
+} from "@/mocks/kamu-oturum"
 import { mockKamuAdapter } from "@prime/mock-data/kamu/mock-adapter"
 import type {
   BorcDetay,
@@ -58,8 +67,6 @@ import type {
   BorcuYokturView,
   KamuDogrulamaCozRequest,
   KamuDogrulamaCozResponse,
-  KamuDogrulamaView,
-  KamuErisimDurumu,
   KamuIslemSonucu,
   KurumBorcOzeti,
   LevhaListResponse,
@@ -109,187 +116,6 @@ function sayfala<T>(liste: T[], p: URLSearchParams, varsayilan = 20) {
     sayfa,
     sayfaBoyutu,
   }
-}
-
-// --- Erişim ve oturum ------------------------------------------------------------------
-
-const gibErisimBul = (mukellefId: string) =>
-  db.tebligatErisim.where((e) => e.mukellefId === mukellefId)[0]
-const sgkErisimBul = (mukellefId: string) =>
-  db.sgkErisim.where((e) => e.mukellefId === mukellefId)[0]
-const dogrulamaBul = (mukellefId: string, kurum: KamuKurum) =>
-  db.kamuDogrulama.where(
-    (d) => d.mukellefId === mukellefId && d.kurum === kurum
-  )[0]
-
-/**
- * Mock backend'de şifre saklanmaz. Hatalı erişim, personel şifreyi güncelleyene kadar başarısız
- * kalsın diye adaptöre "hatali" verilir.
- */
-function kimlikBul(mukellefId: string, kurum: KamuKurum): KamuKimlik | null {
-  if (kurum === "GIB") {
-    const e = gibErisimBul(mukellefId)
-    if (!e) return null
-    return {
-      kurum,
-      kullaniciKodu: e.kullaniciKodu,
-      sifre: e.durum === "HATA" ? "hatali" : "mock",
-    }
-  }
-  const e = sgkErisimBul(mukellefId)
-  if (!e) return null
-  const sifre = e.durum === "HATA" ? "hatali" : "mock"
-  return {
-    kurum,
-    kullaniciAdi: e.kullaniciAdi,
-    isyeriKodu: e.isyeriKodu,
-    sistemSifre: sifre,
-    isyeriSifre: sifre,
-  }
-}
-
-function erisimDurumu(mukellefId: string, kurum: KamuKurum): KamuErisimDurumu {
-  if (dogrulamaBul(mukellefId, kurum)) return "DOGRULAMA"
-  const e =
-    kurum === "GIB" ? gibErisimBul(mukellefId) : sgkErisimBul(mukellefId)
-  if (!e) return "TANIMSIZ"
-  return e.durum
-}
-
-export function dogrulamaView(d: KamuDogrulama): KamuDogrulamaView {
-  const { oturumId: _gizli, ...geri } = d
-  return {
-    ...geri,
-    mukellefUnvan: db.mukellef.find(d.mukellefId)?.unvan ?? "",
-    suresiDoldu: new Date(d.sonGecerlilik) < new Date(),
-  }
-}
-
-/** Giriş başarısız: erişim HATA'ya düşer, ilk düşüşte mükellef sorumlusuna bildirim gider */
-function erisimHatasi(
-  m: Mukellef,
-  kurum: KamuKurum,
-  hataMesaji: string,
-  aktorId: string
-) {
-  const e = kurum === "GIB" ? gibErisimBul(m.id) : sgkErisimBul(m.id)
-  if (!e) return
-  const ilkDusus = e.durum !== "HATA"
-  if (kurum === "GIB")
-    db.tebligatErisim.update(e.id, { durum: "HATA", hataMesaji })
-  else db.sgkErisim.update(e.id, { durum: "HATA", hataMesaji })
-  if (ilkDusus)
-    logActivity(
-      {
-        aktorId,
-        eylem: kurum === "GIB" ? "TEBLIGAT_ERISIM_HATASI" : "SGK_ERISIM_HATASI",
-        hedefTip: "MUKELLEF",
-        hedefId: m.id,
-        mukellefId: m.id,
-        aciklama: `${m.unvan} · ${hataMesaji}`,
-      },
-      {
-        alicilar: [m.sorumluPersonelId],
-        baslik: `${KAMU_KURUM_ETIKET[kurum]} girişi başarısız`,
-      }
-    )
-}
-
-function dogrulamaAc(
-  m: Mukellef,
-  kurum: KamuKurum,
-  oturumId: string,
-  gorselDataUrl: string,
-  adimlar: KamuAdim[],
-  aktorId: string,
-  an: Date
-): KamuDogrulama {
-  const d = db.kamuDogrulama.insert({
-    mukellefId: m.id,
-    kurum,
-    oturumId,
-    gorselDataUrl,
-    sonGecerlilik: addMinutes(an, DOGRULAMA_GECERLILIK_DK).toISOString(),
-    bekleyenAdimlar: [...new Set(adimlar)],
-    olusturmaTarihi: an.toISOString(),
-  })
-  logActivity(
-    {
-      aktorId,
-      eylem: "KAMU_DOGRULAMA_BEKLIYOR",
-      hedefTip: "BORC",
-      hedefId: d.id,
-      mukellefId: m.id,
-      aciklama: `${m.unvan} · ${KAMU_KURUM_ETIKET[kurum]}`,
-    },
-    // Personel kendisi tetiklediyse kodu zaten ekranda görür
-    aktorId === SISTEM_AKTOR
-      ? {
-          alicilar: [m.sorumluPersonelId],
-          baslik: `${KAMU_KURUM_ETIKET[kurum]} doğrulama kodu bekleniyor`,
-        }
-      : false
-  )
-  return d
-}
-
-type OturumSonucu =
-  { oturum: KamuOturum } | { dogrulama: KamuDogrulama } | { hata: string }
-
-/**
- * Mükellef adına kuruma giriş yapar. Bekleyen doğrulama varsa yeniden denenmez; istenen adımlar
- * o kayda eklenir. Doğrulama ekranı çıkarsa kayıt açılır.
- */
-async function oturumAc(
-  m: Mukellef,
-  kurum: KamuKurum,
-  adimlar: KamuAdim[],
-  aktorId: string,
-  adapter: KamuSorguAdapter,
-  an: Date
-): Promise<OturumSonucu> {
-  const kimlik = kimlikBul(m.id, kurum)
-  if (!kimlik)
-    return {
-      hata:
-        kurum === "GIB"
-          ? "GİB erişimi tanımlı değil (e-Tebligat erişimi kullanılır)"
-          : "SGK erişimi tanımlı değil",
-    }
-  const e = kurum === "GIB" ? gibErisimBul(m.id) : sgkErisimBul(m.id)
-  if (e?.durum === "HATA")
-    return {
-      hata: e.hataMesaji ?? `${KAMU_KURUM_ETIKET[kurum]} girişi başarısız`,
-    }
-
-  const bekleyen = dogrulamaBul(m.id, kurum)
-  if (bekleyen) {
-    const birlesik = [...new Set([...bekleyen.bekleyenAdimlar, ...adimlar])]
-    return {
-      dogrulama:
-        db.kamuDogrulama.update(bekleyen.id, { bekleyenAdimlar: birlesik }) ??
-        bekleyen,
-    }
-  }
-
-  const sonuc = await adapter.giris(kimlik)
-  if (sonuc.durum === "HATA") {
-    erisimHatasi(m, kurum, sonuc.hataMesaji, aktorId)
-    return { hata: sonuc.hataMesaji }
-  }
-  if (sonuc.durum === "DOGRULAMA")
-    return {
-      dogrulama: dogrulamaAc(
-        m,
-        kurum,
-        sonuc.oturumId,
-        sonuc.gorselDataUrl,
-        adimlar,
-        aktorId,
-        an
-      ),
-    }
-  return { oturum: sonuc.oturum }
 }
 
 // --- Adımlar ---------------------------------------------------------------------------
@@ -510,7 +336,16 @@ async function adimlariCalistir(
 ): Promise<string[]> {
   const ozet: string[] = []
   for (const adim of new Set(adimlar)) {
-    if (adim === "VERGI_LEVHASI" && kurum === "GIB")
+    if (adim === "TEBLIGAT" && kurum === "GIB") {
+      const yeni = await tebligatlariOku(oturum, m, aktorId, an)
+      ozet.push(
+        yeni === null
+          ? "e-Tebligat kutusu okunamadı"
+          : yeni
+            ? `${yeni} yeni e-Tebligat`
+            : "Yeni e-Tebligat yok"
+      )
+    } else if (adim === "VERGI_LEVHASI" && kurum === "GIB")
       ozet.push(await levhaAl(oturum, m, aktorId, adapter, an))
     else if (adim === "BORC")
       ozet.push(await borcSorgula(oturum, m, kurum, aktorId, adapter, an))

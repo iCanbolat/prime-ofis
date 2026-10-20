@@ -4,12 +4,15 @@ import { useAuthStore } from "@/features/auth/store"
 import { ApiError, http } from "@/lib/http"
 import type { GibTebligatAdapter } from "@prime/shared/tebligat/gib-adapter"
 import { STORAGE_KEY, db } from "@/mocks/db"
+import { gibOturumKodu } from "@prime/mock-data/gib-tebligat"
+import { mockDogrulamaKodu } from "@prime/mock-data/kamu/mock-adapter"
 import { PERSONEL } from "@prime/mock-data/factories/personel"
 import {
   geceTaramasiCalistir,
   sonGeceTaramaAni,
 } from "@/mocks/handlers/tebligat"
 import type {
+  KamuDogrulamaCozResponse,
   TebligatErisimSatiri,
   TebligatListResponse,
   TebligatMukellefTaraResponse,
@@ -42,17 +45,10 @@ function sahteAdapter(
   belgeler: Record<string, { belgeId: string; belgeTuru: string }[]>
 ): GibTebligatAdapter {
   return {
-    async girisDogrula(k) {
-      return k.sifre === "hatali"
-        ? { gecerli: false, hataMesaji: "Şifre hatalı" }
-        : { gecerli: true }
-    },
-    async yeniBelgeler(k) {
-      if (k.sifre === "hatali")
-        return { gecerli: false, hataMesaji: "Şifre hatalı" }
+    async yeniBelgeler(o) {
       return {
         gecerli: true,
-        belgeler: (belgeler[k.kullaniciKodu] ?? []).map((b) => ({
+        belgeler: (belgeler[gibOturumKodu(o)] ?? []).map((b) => ({
           ...b,
           kurum: "GIB" as const,
           konu: b.belgeTuru,
@@ -137,7 +133,6 @@ describe("gece taraması", () => {
 
   it("giriş ilk kez başarısız olunca erişim HATA'ya düşer, sorumluya bir kez bildirim gider", async () => {
     const adapter: GibTebligatAdapter = {
-      girisDogrula: async () => ({ gecerli: true }),
       yeniBelgeler: async () => ({
         gecerli: false,
         hataMesaji: "GİB şifresinin süresi dolmuş",
@@ -216,6 +211,70 @@ describe("GİB erişimi", () => {
     expect(await hataDurumu(http.post("/tebligat/erisim/m_sahis/tara"))).toBe(
       404
     )
+  })
+})
+
+describe("doğrulama ekranı", () => {
+  it("gece girişi kod isterse mükellef atlanır; personel kodu girince kutu taranır", async () => {
+    db.tebligatErisim.update("te_ltd", { kullaniciKodu: "dogrulama01" })
+    const adapter = sahteAdapter({
+      dogrulama01: [{ belgeId: "gib-d-1", belgeTuru: "Ödeme Emri" }],
+    })
+    const tarama = await geceTaramasiCalistir(
+      new Date(2026, 8, 24, 3, 0),
+      adapter
+    )
+    expect(tarama).toMatchObject({ taranan: 2, hatali: 1, dogrulama: 1, yeni: 0 })
+    const [d] = db.kamuDogrulama.where((d) => d.mukellefId === "m_ltd")
+    expect(d).toMatchObject({ kurum: "GIB", bekleyenAdimlar: ["TEBLIGAT"] })
+    // Sorumluya "kod bekleniyor" bildirimi
+    expect(
+      db.bildirim.where(
+        (b) => b.tur === "KAMU_DOGRULAMA_BEKLIYOR" && b.aliciId === "p_3"
+      )
+    ).toHaveLength(1)
+    // Bekleyen doğrulama varken ertesi gece yeniden giriş denenmez
+    expect(
+      await geceTaramasiCalistir(new Date(2026, 8, 25, 3, 0), adapter)
+    ).toMatchObject({ dogrulama: 1 })
+    expect(db.kamuDogrulama.where((x) => x.mukellefId === "m_ltd")).toHaveLength(1)
+
+    const satir = await http.get<TebligatErisimSatiri>("/tebligat/erisim/m_ltd")
+    expect(satir.dogrulama).toMatchObject({ id: d!.id, suresiDoldu: false })
+    expect(JSON.stringify(satir)).not.toContain(d!.oturumId)
+
+    // Elle tarama doğrulamayı döndürür
+    const tara = await http.post<TebligatMukellefTaraResponse>(
+      "/tebligat/erisim/m_ltd/tara"
+    )
+    expect(tara).toMatchObject({ yeni: 0, dogrulama: { id: d!.id } })
+
+    const coz = await http.post<KamuDogrulamaCozResponse>(
+      `/kamu-dogrulama/${d!.id}`,
+      { kod: mockDogrulamaKodu(d!.oturumId) }
+    )
+    expect(coz.ozet).toHaveLength(1)
+    expect(db.kamuDogrulama.count()).toBe(0)
+    expect(db.tebligatErisim.find("te_ltd")?.sonTarama).toBe(
+      new Date(2026, 8, 23, 10, 0).toISOString()
+    )
+  })
+
+  it("şifre güncellenince ya da erişim kaldırılınca bekleyen doğrulama düşer", async () => {
+    db.tebligatErisim.update("te_ltd", { kullaniciKodu: "dogrulama01" })
+    await geceTaramasiCalistir(new Date(2026, 8, 24, 3, 0), sahteAdapter({}))
+    expect(db.kamuDogrulama.count()).toBe(1)
+    const s = await http.put<TebligatErisimSatiri>("/tebligat/erisim/m_ltd", {
+      kullaniciKodu: "0174520662",
+      sifre: "yeni-sifre",
+    })
+    expect(s.dogrulama).toBeNull()
+    expect(db.kamuDogrulama.count()).toBe(0)
+
+    db.tebligatErisim.update("te_ltd", { kullaniciKodu: "dogrulama01" })
+    await geceTaramasiCalistir(new Date(2026, 8, 25, 3, 0), sahteAdapter({}))
+    await http.delete("/tebligat/erisim/m_ltd")
+    expect(db.kamuDogrulama.count()).toBe(0)
   })
 })
 

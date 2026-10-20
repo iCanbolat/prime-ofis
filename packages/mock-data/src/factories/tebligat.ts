@@ -170,6 +170,7 @@ export function createTebligatVerisi(
         bitis: new Date(2026, 8, 22, 3, 6).toISOString(),
         taranan: tebligatErisim.length,
         hatali: tebligatErisim.filter((e) => e.durum === "HATA").length,
+        dogrulama: 0,
         yeni: 0,
       },
     ],

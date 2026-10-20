@@ -845,6 +845,8 @@ export interface TebligatTarama {
   hatali: number
   /** Kaydedilen yeni tebligat sayısı */
   yeni: number
+  /** Doğrulama ekranı (CAPTCHA) çıktığı ya da beklediği için taranamayan mükellef sayısı */
+  dogrulama: number
 }
 
 // --- Borç ve levha sorguları (Faz 14) ------------------------------------------------
@@ -941,7 +943,7 @@ export interface BorcuYokturTalebi {
 }
 
 /** Doğrulama çözülünce aynı oturumla çalıştırılacak sorgu adımları */
-export type KamuAdim = "VERGI_LEVHASI" | "BORC" | "BORCU_YOKTUR"
+export type KamuAdim = "TEBLIGAT" | "VERGI_LEVHASI" | "BORC" | "BORCU_YOKTUR"
 
 /**
  * GİB/SGK girişinde çıkan doğrulama ekranı (CAPTCHA). Otomatik geçilmez: robot durur, kayıt

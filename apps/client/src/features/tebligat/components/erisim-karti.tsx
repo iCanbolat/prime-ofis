@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { DogrulamaDialog } from "@/features/borc/components/dogrulama"
 import { useCredentials } from "@/features/kasa/queries"
 import { ErisimDialog } from "@/features/tebligat/components/erisim-dialog"
 import { useKasadanAktar } from "@/features/tebligat/kasa-aktarim"
@@ -22,6 +23,7 @@ import {
   useTebligatMukellefTara,
 } from "@/features/tebligat/queries"
 import { formatDateTime } from "@prime/shared/lib/format"
+import type { KamuDogrulamaView } from "@prime/shared/types/api"
 
 /** Kasadaki İnteraktif VD şifresi taramanın kullandığından yeniyse uyarı + tek tıkla güncelleme */
 function KasaDahaYeni({
@@ -59,6 +61,7 @@ export function ErisimKarti({ mukellefId }: { mukellefId: string }) {
   const kaldir = useTebligatErisimKaldir()
   const [duzenle, setDuzenle] = useState(false)
   const [kaldirilacak, setKaldirilacak] = useState(false)
+  const [dogrulama, setDogrulama] = useState<KamuDogrulamaView | null>(null)
 
   if (erisim.isError)
     return <ErrorState error={erisim.error} onRetry={() => erisim.refetch()} />
@@ -70,7 +73,9 @@ export function ErisimKarti({ mukellefId }: { mukellefId: string }) {
     ? "Tanımlanınca mükellefin GİB e-Tebligat kutusu her gece taranır; tanımlanana kadar tebligatlar yalnızca elle girilebilir."
     : e.durum === "HATA"
       ? `${e.hataMesaji ?? "GİB'e giriş yapılamadı"}. Şifre güncellenene kadar gece taramasında atlanır.`
-      : "Her gece taranır; yeni tebligatlar sabah listede olur."
+      : s.dogrulama
+        ? "GİB girişi doğrulama kodu istedi. Kod girilene kadar kutu taranmaz."
+        : "Her gece taranır; yeni tebligatlar sabah listede olur."
 
   return (
     <Card size="sm">
@@ -93,7 +98,12 @@ export function ErisimKarti({ mukellefId }: { mukellefId: string }) {
           )}
         </CardDescription>
         <CardAction className="flex flex-wrap gap-2">
-          {e && (
+          {s.dogrulama && (
+            <Button size="sm" onClick={() => setDogrulama(s.dogrulama)}>
+              Kodu gir
+            </Button>
+          )}
+          {e && !s.dogrulama && (
             <Button
               size="sm"
               variant="outline"
@@ -101,11 +111,13 @@ export function ErisimKarti({ mukellefId }: { mukellefId: string }) {
               onClick={() =>
                 tara.mutate(mukellefId, {
                   onSuccess: (r) =>
-                    toast.success(
-                      r.yeni === 0
-                        ? "Yeni e-Tebligat yok"
-                        : `${r.yeni} yeni e-Tebligat`
-                    ),
+                    r.dogrulama
+                      ? setDogrulama(r.dogrulama)
+                      : toast.success(
+                          r.yeni === 0
+                            ? "Yeni e-Tebligat yok"
+                            : `${r.yeni} yeni e-Tebligat`
+                        ),
                   onError: (error) => toast.error(error.message),
                 })
               }
@@ -142,6 +154,10 @@ export function ErisimKarti({ mukellefId }: { mukellefId: string }) {
       <ErisimDialog
         satir={duzenle ? s : null}
         onClose={() => setDuzenle(false)}
+      />
+      <DogrulamaDialog
+        dogrulama={dogrulama}
+        onClose={() => setDogrulama(null)}
       />
       <ConfirmDialog
         open={kaldirilacak}

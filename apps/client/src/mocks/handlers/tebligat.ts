@@ -2,15 +2,23 @@
  * `/api/tebligat/*` — e-Tebligat takibi. Gerçek backend her gece erişimi tanımlı mükelleflerin
  * GİB e-Tebligat kutusunu `GibTebligatAdapter` ile tarar; burada mock adaptör kullanılır ve
  * kaçırılan son gece taraması (03:00) özet isteğinde işletilir (testte kapalı; testler
- * `geceTaramasiCalistir`'ı doğrudan çağırır).
+ * `geceTaramasiCalistir`'ı doğrudan çağırır). Giriş kamu oturumuyla açılır (`kamu-oturum.ts`);
+ * doğrulama ekranı çıkarsa tarama personel kodu girene kadar bekler.
  */
 import { addDays, addMinutes } from "date-fns"
 import { HttpResponse, http } from "msw"
 
 import type {
-  GibKimlik,
-  GibTebligatAdapter,
-} from "@prime/shared/tebligat/gib-adapter"
+  KamuOturum,
+  KamuSorguAdapter,
+} from "@prime/shared/borc/kamu-adapter"
+import type { GibTebligatAdapter } from "@prime/shared/tebligat/gib-adapter"
+import {
+  erisimHatasi as erisimGirdiHatasi,
+  tebligatEkleHatasi,
+  tebligatGuncelleHatasi,
+  TEBLIGAT_BELGE_TURLERI,
+} from "@prime/shared/tebligat/girdi"
 import {
   sureDurumu,
   SURE_KURALLARI,
@@ -23,7 +31,8 @@ import {
 import { bugun, fromYmd, toYmd } from "@prime/shared/lib/tarih"
 import { putBlob } from "@/mocks/blob-store"
 import { db } from "@/mocks/db"
-import { mockGibAdapter } from "@/mocks/gib/mock-adapter"
+import { mockGibAdapter } from "@prime/mock-data/gib-tebligat"
+import { mockKamuAdapter } from "@prime/mock-data/kamu/mock-adapter"
 import {
   api,
   errorResponse,
@@ -33,6 +42,13 @@ import {
   turkishIncludes,
 } from "@/mocks/handlers/common"
 import { SISTEM_AKTOR } from "@/mocks/handlers/tahsilat"
+import {
+  dogrulamaAc,
+  dogrulamaBul,
+  dogrulamaView,
+  erisimHatasi,
+  oturumAc,
+} from "@/mocks/kamu-oturum"
 import type {
   TebligatBelgeRequest,
   TebligatEkleRequest,
@@ -48,20 +64,14 @@ import type {
   TebligatView,
 } from "@prime/shared/types/api"
 import type {
+  KamuDogrulama,
   Mukellef,
   Tebligat,
-  TebligatDurum,
   TebligatErisim,
   TebligatTarama,
   TebligatTur,
 } from "@prime/shared/types/domain"
 
-const DURUMLAR: TebligatDurum[] = [
-  "YENI",
-  "INCELENDI",
-  "ISLEM_YAPILDI",
-  "KAPANDI",
-]
 const TURLER = Object.keys(SURE_KURALLARI) as TebligatTur[]
 const KAPSAMLAR: TebligatKapsam[] = ["acik", "acil", "kapali"]
 const ERISIM_DURUMLARI: TebligatErisimSatirDurumu[] = [
@@ -115,15 +125,6 @@ function tebligatAciklama(t: Tebligat) {
   return `${TEBLIGAT_TUR_ETIKET[t.tur]} · ${m?.unvan ?? `VKN ${t.vkn}`}`
 }
 
-/**
- * Mock backend'de şifre saklanmaz. Hatalı erişimde elle "Yeniden dene" personel şifreyi
- * güncelleyene kadar başarısız kalsın diye adaptöre "hatali" verilir.
- */
-const kimlik = (e: TebligatErisim): GibKimlik => ({
-  kullaniciKodu: e.kullaniciKodu,
-  sifre: e.durum === "HATA" ? "hatali" : "mock",
-})
-
 /** Önceki gece 03:00 (şu an 03:00'ten önceyse dünden önceki gece) */
 export function sonGeceTaramaAni(simdi: Date = new Date()): Date {
   const an = new Date(simdi)
@@ -155,37 +156,22 @@ function erisimSayilari(): TebligatErisimSayilari {
 }
 
 /**
- * Bir mükellefin kutusunu tarar; yeni belgeleri tebligat olarak kaydeder. Giriş başarısızsa
- * erişim HATA'ya düşer (ilk düşüşte sorumluya bildirim) ve `null` döner.
+ * Açık GİB oturumuyla mükellefin kutusunu okur; yeni belgeleri tebligat olarak kaydeder. Kutu
+ * okunamazsa erişim HATA'ya düşer (ilk düşüşte sorumluya bildirim) ve `null` döner. Doğrulama
+ * kodu girildikten sonra `TEBLIGAT` adımı da bunu çağırır.
  */
-async function mukellefTara(
-  e: TebligatErisim,
+export async function tebligatlariOku(
+  oturum: KamuOturum,
   m: Mukellef,
-  adapter: GibTebligatAdapter,
+  aktorId: string,
   an: Date,
-  aktorId: string
+  adapter: GibTebligatAdapter = mockGibAdapter(() => an)
 ): Promise<number | null> {
-  const sonuc = await adapter.yeniBelgeler(kimlik(e), e.sonTarama)
+  const e = erisimBul(m.id)
+  if (!e) return null
+  const sonuc = await adapter.yeniBelgeler(oturum, e.sonTarama)
   if (!sonuc.gecerli) {
-    db.tebligatErisim.update(e.id, {
-      durum: "HATA",
-      hataMesaji: sonuc.hataMesaji,
-    })
-    if (e.durum !== "HATA")
-      logActivity(
-        {
-          aktorId,
-          eylem: "TEBLIGAT_ERISIM_HATASI",
-          hedefTip: "MUKELLEF",
-          hedefId: m.id,
-          mukellefId: m.id,
-          aciklama: `${m.unvan} · ${sonuc.hataMesaji}`,
-        },
-        {
-          alicilar: [m.sorumluPersonelId],
-          baslik: "GİB e-Tebligat girişi başarısız",
-        }
-      )
+    erisimHatasi(m, "GIB", sonuc.hataMesaji, aktorId)
     return null
   }
 
@@ -232,6 +218,25 @@ async function mukellefTara(
   return yeni
 }
 
+type TaramaSonucu =
+  { yeni: number } | { dogrulama: KamuDogrulama } | { hata: string }
+
+/** Oturum açar (bekleyen doğrulama varsa denemez) ve kutuyu okur */
+async function mukellefTara(
+  m: Mukellef,
+  aktorId: string,
+  an: Date,
+  adapter: GibTebligatAdapter,
+  giris: KamuSorguAdapter
+): Promise<TaramaSonucu> {
+  const r = await oturumAc(m, "GIB", ["TEBLIGAT"], aktorId, giris, an)
+  if (!("oturum" in r)) return r
+  const yeni = await tebligatlariOku(r.oturum, m, aktorId, an, adapter)
+  return yeni === null
+    ? { hata: erisimBul(m.id)?.hataMesaji ?? "GİB e-Tebligat kutusuna girilemedi" }
+    : { yeni }
+}
+
 /**
  * Büro geneli gece taraması: erişimi tanımlı her aktif mükellef sırayla taranır. Girişi
  * başarısız olanlar, GİB hesabı ardışık hatalı girişle kilitlenmesin diye şifre güncellenene
@@ -239,10 +244,12 @@ async function mukellefTara(
  */
 export async function geceTaramasiCalistir(
   an: Date,
-  adapter: GibTebligatAdapter = mockGibAdapter(() => an)
+  adapter: GibTebligatAdapter = mockGibAdapter(() => an),
+  giris: KamuSorguAdapter = mockKamuAdapter(() => an)
 ): Promise<TebligatTarama> {
   let taranan = 0
   let hatali = 0
+  let dogrulama = 0
   let yeni = 0
   for (const e of db.tebligatErisim.all()) {
     const m = db.mukellef.find(e.mukellefId)
@@ -252,9 +259,14 @@ export async function geceTaramasiCalistir(
       hatali++
       continue
     }
-    const n = await mukellefTara(e, m, adapter, an, SISTEM_AKTOR)
-    if (n === null) hatali++
-    else yeni += n
+    if (dogrulamaBul(m.id, "GIB")) {
+      dogrulama++
+      continue
+    }
+    const r = await mukellefTara(m, SISTEM_AKTOR, an, adapter, giris)
+    if ("hata" in r) hatali++
+    else if ("dogrulama" in r) dogrulama++
+    else yeni += r.yeni
   }
   const tarama = db.tebligatTarama.insert({
     baslangic: an.toISOString(),
@@ -262,6 +274,7 @@ export async function geceTaramasiCalistir(
     taranan,
     hatali,
     yeni,
+    dogrulama,
   })
   const fazla = db.tebligatTarama
     .all()
@@ -296,6 +309,7 @@ function erisimSatiri(
   e: TebligatErisim | undefined
 ): TebligatErisimSatiri {
   const kasa = kasaKaydi(m.id)
+  const d = dogrulamaBul(m.id, "GIB")
   return {
     mukellefId: m.id,
     mukellefUnvan: m.unvan,
@@ -309,6 +323,7 @@ function erisimSatiri(
       e?.kasaKaynagi?.credentialId === kasa.id &&
       kasa.sonGuncelleme > e.kasaKaynagi.credentialGuncelleme
     ),
+    dogrulama: e && d ? dogrulamaView(d) : null,
   }
 }
 
@@ -355,11 +370,9 @@ export const tebligatHandlers = [
       const m = db.mukellef.find(params.mukellefId)
       if (!m) return notFound("Mükellef bulunamadı")
       const body = await request.json()
-      const kullaniciKodu = body.kullaniciKodu?.trim() ?? ""
-      if (!/^\d{6,11}$/.test(kullaniciKodu))
-        return errorResponse(400, "Kullanıcı kodu 6–11 haneli olmalı")
-      if (!body.sifre || body.sifre.length < 4)
-        return errorResponse(400, "Şifre en az 4 karakter olmalı")
+      const hata = erisimGirdiHatasi(body)
+      if (hata) return errorResponse(400, hata)
+      const kullaniciKodu = body.kullaniciKodu.trim()
       const kasa = body.kasaCredentialId
         ? db.credential.find(body.kasaCredentialId)
         : undefined
@@ -371,12 +384,16 @@ export const tebligatHandlers = [
           400,
           "Kasa kaydı bu mükellefin İnteraktif VD kaydı değil"
         )
-      const sonuc = await mockGibAdapter().girisDogrula({
+      const an = new Date()
+      const sonuc = await mockKamuAdapter().giris({
+        kurum: "GIB",
         kullaniciKodu,
         sifre: body.sifre,
       })
-      if (!sonuc.gecerli)
-        return errorResponse(422, sonuc.hataMesaji ?? "GİB girişi başarısız")
+      if (sonuc.durum === "HATA") return errorResponse(422, sonuc.hataMesaji)
+      // Yeni kimlikle önceki doğrulama oturumu geçersizdir
+      const eskiDogrulama = dogrulamaBul(m.id, "GIB")
+      if (eskiDogrulama) db.kamuDogrulama.remove(eskiDogrulama.id)
 
       const kayit = {
         kullaniciKodu,
@@ -387,7 +404,7 @@ export const tebligatHandlers = [
           ? { credentialId: kasa.id, credentialGuncelleme: kasa.sonGuncelleme }
           : undefined,
         tanimlayanId: actor.id,
-        tanimlamaTarihi: new Date().toISOString(),
+        tanimlamaTarihi: an.toISOString(),
       }
       const mevcut = erisimBul(m.id)
       const e = mevcut
@@ -419,6 +436,17 @@ export const tebligatHandlers = [
           },
           false
         )
+      // Giriş doğrulama kodu istedi: kayıt açılır, kod girilince kutu taranır
+      if (sonuc.durum === "DOGRULAMA")
+        dogrulamaAc(
+          m,
+          "GIB",
+          sonuc.oturumId,
+          sonuc.gorselDataUrl,
+          ["TEBLIGAT"],
+          actor.id,
+          an
+        )
       return HttpResponse.json(erisimSatiri(m, e))
     }
   ),
@@ -432,6 +460,8 @@ export const tebligatHandlers = [
       const e = m && erisimBul(m.id)
       if (!m || !e) return notFound("GİB erişimi tanımlı değil")
       db.tebligatErisim.remove(e.id)
+      const d = dogrulamaBul(m.id, "GIB")
+      if (d) db.kamuDogrulama.remove(d.id)
       logActivity(
         {
           aktorId: actor.id,
@@ -456,20 +486,19 @@ export const tebligatHandlers = [
       const m = db.mukellef.find(params.mukellefId)
       const e = m && erisimBul(m.id)
       if (!m || !e) return notFound("GİB erişimi tanımlı değil")
-      const yeni = await mukellefTara(
-        e,
+      const r = await mukellefTara(
         m,
-        mockGibAdapter(),
+        actor.id,
         new Date(),
-        actor.id
+        mockGibAdapter(),
+        mockKamuAdapter()
       )
-      const guncel = erisimBul(m.id)!
-      if (yeni === null)
-        return errorResponse(
-          409,
-          guncel.hataMesaji ?? "GİB e-Tebligat kutusuna girilemedi"
-        )
-      const yanit: TebligatMukellefTaraResponse = { yeni, erisim: guncel }
+      if ("hata" in r) return errorResponse(409, r.hata)
+      const yanit: TebligatMukellefTaraResponse = {
+        yeni: "yeni" in r ? r.yeni : 0,
+        erisim: erisimBul(m.id)!,
+        dogrulama: "dogrulama" in r ? dogrulamaView(r.dogrulama) : null,
+      }
       return HttpResponse.json(yanit)
     }
   ),
@@ -560,19 +589,8 @@ export const tebligatHandlers = [
       const body = await request.json()
       const m = db.mukellef.find(body.mukellefId)
       if (!m) return errorResponse(400, "Mükellef seçin")
-      if (!TURLER.includes(body.tur))
-        return errorResponse(400, "Geçersiz tebligat türü")
-      if (!body.konu?.trim()) return errorResponse(400, "Konu zorunludur")
-      if (
-        !/^\d{4}-\d{2}-\d{2}$/.test(body.ulasmaGunu ?? "") ||
-        body.ulasmaGunu > bugun()
-      )
-        return errorResponse(400, "Geçerli bir ulaşma tarihi girin")
-      if (
-        body.sureGun !== undefined &&
-        !(body.sureGun >= 1 && body.sureGun <= 365)
-      )
-        return errorResponse(400, "Süre 1–365 gün olmalı")
+      const hata = tebligatEkleHatasi(body, bugun())
+      if (hata) return errorResponse(400, hata)
       const ulasma = fromYmd(body.ulasmaGunu)
       ulasma.setHours(9)
       const t = db.tebligat.insert({
@@ -612,12 +630,12 @@ export const tebligatHandlers = [
       const t = db.tebligat.find(params.id)
       if (!t) return notFound("Tebligat bulunamadı")
       const body = await request.json()
+      const hata = tebligatGuncelleHatasi(body)
+      if (hata) return errorResponse(400, hata)
       const patch: Partial<Tebligat> = {}
       const degisiklik: string[] = []
 
       if (body.durum !== undefined) {
-        if (!DURUMLAR.includes(body.durum))
-          return errorResponse(400, "Geçersiz durum")
         if (body.durum !== t.durum) degisiklik.push("durum")
         patch.durum = body.durum
       }
@@ -629,11 +647,6 @@ export const tebligatHandlers = [
       }
       if (body.not !== undefined) patch.not = body.not.trim() || undefined
       if (body.sureGun !== undefined) {
-        if (
-          body.sureGun !== null &&
-          !(body.sureGun >= 1 && body.sureGun <= 365)
-        )
-          return errorResponse(400, "Süre 1–365 gün olmalı")
         patch.sureGun = body.sureGun ?? undefined
       }
 
@@ -722,7 +735,7 @@ export const tebligatHandlers = [
       const mimeType = DATA_URL_RE.exec(dosya?.dataUrl ?? "")?.[1]
       if (
         !mimeType ||
-        !["application/pdf", "image/png", "image/jpeg"].includes(mimeType)
+        !TEBLIGAT_BELGE_TURLERI.includes(mimeType)
       )
         return errorResponse(400, "PDF, PNG veya JPG yükleyin")
       const boyut = Math.round(

@@ -63,6 +63,12 @@ export const envSchema = z
     /** Gerçek portala ardışık iki istek arasındaki en kısa süre (ms) */
     LUCA_ISTEK_ARALIGI_MS: z.coerce.number().int().min(0).default(1500),
 
+    /**
+     * GİB İnteraktif VD (e-Tebligat; CAPTCHA'yı personel girer): `mock` geliştirme / test
+     * taklidi, `http` gerçek bağlantı (Faz 12)
+     */
+    GIB_ADAPTER: z.enum(["mock", "http"]).default("mock"),
+
     CLAUDE_API_KEY: z.string().optional(),
     CLAUDE_MODEL: z.string().optional(),
   })

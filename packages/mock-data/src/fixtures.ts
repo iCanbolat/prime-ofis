@@ -771,6 +771,7 @@ export const FIXTURE_TEBLIGAT_TARAMA: TebligatTarama = {
   taranan: 2,
   hatali: 1,
   yeni: 0,
+  dogrulama: 0,
 }
 
 /** Yalnızca e-posta kanalı bağlı; WhatsApp ve Telegram yapılandırılmamış */

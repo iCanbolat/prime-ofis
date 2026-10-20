@@ -87,8 +87,13 @@ function ErisimForm({
 
   const onSubmit = handleSubmit(async (v) => {
     try {
-      await kaydet.mutateAsync({ mukellefId: satir.mukellefId, ...v })
-      toast.success("GİB erişimi kaydedildi; kutu bu geceden itibaren taranır")
+      const r = await kaydet.mutateAsync({ mukellefId: satir.mukellefId, ...v })
+      if (r.dogrulama)
+        toast.info(
+          "GİB erişimi kaydedildi. Giriş doğrulama kodu istedi; \"Kodu gir\" ile tamamlayın"
+        )
+      else
+        toast.success("GİB erişimi kaydedildi; kutu bu geceden itibaren taranır")
       onClose()
     } catch (error) {
       if (error instanceof ApiError && error.status === 422)

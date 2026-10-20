@@ -97,6 +97,7 @@ export interface GizliKolon {
 export const GIZLI_KOLONLAR: GizliKolon[] = [
   { tablo: "kanal_ayari", idKolonu: "tip", kolon: "gizli" },
   { tablo: "luca_hesap", idKolonu: "id", kolon: "sifre" },
+  { tablo: "tebligat_erisim", idKolonu: "id", kolon: "sifre_enc" },
 ]
 
 /** Kanal / entegratör ayarlarında gösterilen ipucu: düz son 4 karakter (client `••••` ekler) */
