@@ -9,7 +9,7 @@ import type { DbState } from "@prime/mock-data/state"
 
 export type { DbState }
 
-export const STORAGE_KEY = "prime-ofis:db:v17"
+export const STORAGE_KEY = "prime-ofis:db:v18"
 
 const ID_PREFIX: Record<keyof DbState, string> = {
   buro: "b",
@@ -52,6 +52,7 @@ const ID_PREFIX: Record<keyof DbState, string> = {
   borcuYoktur: "by",
   kamuDogrulama: "kd",
   kamuTarama: "kt",
+  lucaHesap: "lh",
 }
 
 let state: DbState | null = null
@@ -202,6 +203,7 @@ export const db = {
   borcuYoktur: collection("borcuYoktur"),
   kamuDogrulama: collection("kamuDogrulama"),
   kamuTarama: collection("kamuTarama"),
+  lucaHesap: collection("lucaHesap"),
 }
 
 /** Veritabanını seed'e sıfırlar (Ayarlar → Geliştirici ve testler). */

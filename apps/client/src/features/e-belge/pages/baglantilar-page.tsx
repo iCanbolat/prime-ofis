@@ -32,16 +32,14 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { hasRole, useAuthStore } from "@/features/auth/store"
 import { BaglantiDialog } from "@/features/e-belge/components/baglanti-dialog"
+import { LucaFirmaAktarimDialog } from "@/features/e-belge/components/luca-firma-aktarim"
 import { BaglantiDurumBadge } from "@/features/e-belge/components/ebelge-rozetleri"
 import {
   useBaglantiKaldir,
   useBaglantilar,
   useSenkron,
 } from "@/features/e-belge/queries"
-import {
-  BAGLANTI_DURUM_ETIKET,
-  ORTAM_ETIKET,
-} from "@prime/shared/e-belge/sabitler"
+import { BAGLANTI_DURUM_ETIKET } from "@prime/shared/e-belge/sabitler"
 import { formatDateTime } from "@prime/shared/lib/format"
 import type { EntegratorBaglantiView } from "@prime/shared/types/api"
 import type { EntegratorBaglantiDurumu } from "@prime/shared/types/domain"
@@ -78,6 +76,7 @@ export function BaglantilarPage() {
   )
   const [kaldirilacak, setKaldirilacak] =
     useState<EntegratorBaglantiView | null>(null)
+  const [aktarim, setAktarim] = useState(false)
 
   const sayilar = useMemo(() => {
     const s: Record<EntegratorBaglantiDurumu, number> = {
@@ -138,7 +137,11 @@ export function BaglantilarPage() {
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        {!yonetici && (
+        {yonetici ? (
+          <Button variant="outline" onClick={() => setAktarim(true)}>
+            Luca'dan mükellef aktar
+          </Button>
+        ) : (
           <p className="text-sm text-muted-foreground">
             Bağlantıları yalnızca yönetici kurabilir veya kaldırabilir.
           </p>
@@ -177,8 +180,9 @@ export function BaglantilarPage() {
                     </Link>
                     {b.durum !== "BAGLI_DEGIL" && (
                       <span className="block truncate text-xs text-muted-foreground">
-                        {ORTAM_ETIKET[b.ortam]} ortam
-                        {b.anahtarIpucu && ` · anahtar ••••${b.anahtarIpucu}`}
+                        {b.lucaFirmaId
+                          ? "Luca firmasına eşli"
+                          : "Luca firmasıyla eşlenmemiş"}
                       </span>
                     )}
                   </TableCell>
@@ -260,6 +264,10 @@ export function BaglantilarPage() {
         </div>
       )}
 
+      <LucaFirmaAktarimDialog
+        open={aktarim}
+        onClose={() => setAktarim(false)}
+      />
       <BaglantiDialog
         baglanti={duzenlenen}
         onClose={() => setDuzenlenen(null)}

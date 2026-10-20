@@ -49,7 +49,7 @@ describe("e-Belge — faturalar", () => {
     )
   })
 
-  it("ticari faturayı red: neden zorunlu, yanıt kaydedilir", async () => {
+  it("ticari yanıt Luca'da verilir; kalemler görünür, arşive kaydet arşiv bağlantısına dönüşür", async () => {
     const { user } = renderRoute("/e-belge/e-fatura?fatura=f_yakin", {
       as: TEST_USERS.personel,
     })
@@ -62,47 +62,10 @@ describe("e-Belge — faturalar", () => {
     expect(
       within(panel).getByText("Yanıt bekliyor · 1 gün")
     ).toBeInTheDocument()
-
-    await user.click(within(panel).getByRole("button", { name: "Reddet" }))
-    const dialog = await screen.findByRole("dialog", {
-      name: "Faturayı reddet",
-    })
-    await user.click(within(dialog).getByRole("button", { name: "Reddet" }))
     expect(
-      within(dialog).getByText("Red nedeni zorunludur")
-    ).toBeInTheDocument()
-
-    await user.click(
-      within(dialog).getByRole("button", { name: "Mükerrer fatura" })
-    )
-    await user.click(within(dialog).getByRole("button", { name: "Reddet" }))
-
-    expect(await within(panel).findByText("Reddedildi")).toBeInTheDocument()
-    expect(within(panel).getByText("Mükerrer fatura")).toBeInTheDocument()
-    expect(
-      within(panel).queryByText("Ticari fatura yanıtı bekleniyor")
+      within(panel).queryByRole("button", { name: "Reddet" })
     ).not.toBeInTheDocument()
-    expect(db.ebelge.find("f_yakin")).toMatchObject({
-      yanit: "RED",
-      redNedeni: "Mükerrer fatura",
-      yanitlayanId: TEST_USERS.personel.id,
-    })
-  })
-
-  it("kabul onay penceresiyle yapılır; arşive kaydet arşiv bağlantısına dönüşür", async () => {
-    const { user } = renderRoute("/e-belge/e-fatura?fatura=f_bekleyen", {
-      as: TEST_USERS.personel,
-    })
-    const panel = await screen.findByRole("dialog", {
-      name: "DNZ2026000000412",
-    })
     await within(panel).findByText("Kalemler")
-    await user.click(within(panel).getByRole("button", { name: "Kabul et" }))
-    const onay = await screen.findByRole("alertdialog", {
-      name: "Fatura kabul edilsin mi?",
-    })
-    await user.click(within(onay).getByRole("button", { name: "Kabul et" }))
-    expect(await within(panel).findByText("Kabul edildi")).toBeInTheDocument()
 
     await user.click(
       within(panel).getByRole("button", { name: "Arşive kaydet" })
@@ -115,7 +78,7 @@ describe("e-Belge — faturalar", () => {
 })
 
 describe("e-Belge — bağlantılar ve e-Defter", () => {
-  it("yönetici bağlantı kurar; hatalı anahtar alana yazılır", async () => {
+  it("yönetici mükellefi Luca firmasına eşler; aynı VKN'li firma önerilir", async () => {
     const { user } = renderRoute("/e-belge/baglantilar", {
       as: TEST_USERS.yonetici,
     })
@@ -123,36 +86,19 @@ describe("e-Belge — bağlantılar ve e-Defter", () => {
       await screen.findByRole("button", { name: "Ali Veli Luca'ya bağla" })
     )
     const dialog = await screen.findByRole("dialog", {
-      name: "Luca'ya bağla",
+      name: "Luca firmasına eşle",
     })
-    const alan = within(dialog).getByLabelText("Web servis anahtarı")
-    expect(alan).toHaveAttribute("type", "password")
-
-    await user.type(alan, "kisa")
-    await user.click(within(dialog).getByRole("button", { name: "Bağla" }))
     expect(
-      await within(dialog).findByText("Anahtar en az 16 karakter olmalı")
-    ).toBeInTheDocument()
-
-    await user.clear(alan)
-    await user.type(alan, "hatali-anahtar-00000000")
-    await user.click(within(dialog).getByRole("button", { name: "Bağla" }))
-    expect(
-      await within(dialog).findByText(
-        "Luca web servis anahtarı doğrulanamadı (401)"
-      )
-    ).toBeInTheDocument()
-
-    await user.clear(alan)
-    await user.type(alan, "nv_live_0123456789abcdef")
-    await user.click(within(dialog).getByRole("button", { name: "Bağla" }))
+      await within(dialog).findByRole("combobox", { name: "Luca firması" })
+    ).toHaveTextContent("Ali Veli")
+    await user.click(within(dialog).getByRole("button", { name: "Eşle" }))
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
     const tablo = screen.getByRole("table", { name: "Luca bağlantıları" })
     const satir = within(tablo)
       .getByRole("link", { name: "Ali Veli" })
       .closest("tr")!
     expect(await within(satir).findByText("Bağlı")).toBeInTheDocument()
-    expect(within(satir).getByText(/••••cdef/)).toBeInTheDocument()
+    expect(within(satir).getByText("Luca firmasına eşli")).toBeInTheDocument()
   })
 
   it("personel bağlantı kuramaz", async () => {
@@ -195,7 +141,7 @@ describe("e-Belge — bağlantılar ve e-Defter", () => {
 describe("Mükellef kartı — e-Belge sekmesi", () => {
   it("bağlı mükellefte faturalar ve beratlar listelenir", async () => {
     renderRoute("/mukellefler/m_ltd/e-belge", { as: TEST_USERS.personel })
-    expect(await screen.findByText(/anahtar ••••x7k2/)).toBeInTheDocument()
+    expect(await screen.findByText(/Luca firmasına eşli/)).toBeInTheDocument()
     await screen.findByRole("button", {
       name: "CNR2026000000057 faturasını aç",
     })

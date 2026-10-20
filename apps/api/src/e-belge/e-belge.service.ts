@@ -2,6 +2,7 @@ import { TransactionHost, Transactional } from "@nestjs-cls/transactional"
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,10 +10,11 @@ import {
   type OnModuleInit,
 } from "@nestjs/common"
 import { format, subMonths } from "date-fns"
-import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm"
+import { and, eq, gte, inArray, lte, or, sql, type SQL } from "drizzle-orm"
 import type { FastifyRequest } from "fastify"
 
 import type {
+  BaglantiDogrulamaSonucu,
   EntegratorBerat,
   EntegratorFatura,
   EntegratorKimlik,
@@ -24,8 +26,9 @@ import {
   EBELGE_YONLERI,
   faturaFiltreHatasi,
   kontorAlimHatasi,
-  yanitHatasi,
+  lucaAktarimHatasi,
 } from "@prime/shared/e-belge/girdi"
+import { lucaFirmasindanMukellef } from "@prime/shared/e-belge/luca-mukellef"
 import {
   donemTuketimi,
   kontorBakiyesi,
@@ -37,7 +40,6 @@ import {
   YANIT_UYARI_GUN,
   yanitDurumu,
   yanitKalanGun,
-  yanitlanabilirMi,
 } from "@prime/shared/e-belge/kurallar"
 import { SAYFA_BOYUTU } from "@prime/shared/e-belge/sabitler"
 import { toYmd } from "@prime/shared/lib/tarih"
@@ -51,11 +53,12 @@ import type {
   EBelgeListResponse,
   EBelgeOzetResponse,
   EBelgeView,
-  EFaturaYanitRequest,
   EntegratorBaglantiView,
   KontorAlimRequest,
   KontorAlimView,
   KontorOzetResponse,
+  LucaFirmaAktarimRequest,
+  LucaFirmaAktarimSonucu,
   SenkronResponse,
 } from "@prime/shared/types/api"
 import type {
@@ -77,7 +80,7 @@ import { BildirimService } from "../bildirim/bildirim.service.js"
 import { newId } from "../core/id.js"
 import { nullsuz } from "../core/nullsuz.js"
 import { Saat } from "../core/saat.js"
-import { SecretBox, sonDort } from "../core/secret-box.js"
+import { SecretBox } from "../core/secret-box.js"
 import { sayfala } from "../core/sayfala.js"
 import type { DrizzleTx } from "../db/db.module.js"
 import {
@@ -86,23 +89,23 @@ import {
   edefterBerat,
   entegratorBaglanti,
   kontorAlim,
+  lucaHesap,
   mukellef,
   personel,
 } from "../db/schema/index.js"
 import { SeedYukleyici } from "../dev/seed-yukleyici.js"
 import { DosyaErisimKaydi } from "../dosya/dosya-erisim-kaydi.js"
 import { HatirlatmaService } from "../hatirlatma/hatirlatma.service.js"
-import { IsKuyrugu } from "../jobs/jobs.module.js"
 import { BeyanDurumuService } from "../takvim/beyan-durumu.service.js"
+import { MukellefService } from "../mukellef/mukellef.service.js"
 import { Entegrator } from "./entegrator.js"
+import { LucaDogrulamaGerekli, LucaOturumService } from "./luca-portal/luca-oturum.service.js"
 
-export const EBELGE_SENKRON_ISI = "e-belge-senkron"
-const SISTEM_AKTOR = "sistem"
 
 type BaglantiSatiri = typeof entegratorBaglanti.$inferSelect
 type EBelgeSatiri = typeof ebelge.$inferSelect
 
-const baglantiSatirindan = ({ anahtar: _a, ...b }: BaglantiSatiri): EntegratorBaglanti =>
+const baglantiSatirindan = (b: BaglantiSatiri): EntegratorBaglanti =>
   nullsuz(b) as EntegratorBaglanti
 const ebelgeSatirindan = (e: EBelgeSatiri): EBelge => nullsuz(e) as EBelge
 const beratSatirindan = (b: typeof edefterBerat.$inferSelect): EDefterBerat => ({
@@ -160,17 +163,20 @@ export class EBelgeService implements OnModuleInit {
     private readonly yazici: ArsivYazici,
     private readonly erisim: DosyaErisimKaydi,
     private readonly hatirlatma: HatirlatmaService,
-    private readonly isler: IsKuyrugu,
     private readonly seed: SeedYukleyici,
+    private readonly oturum: LucaOturumService,
+    private readonly mukellefler: MukellefService,
     private readonly saat: Saat
   ) {}
 
   onModuleInit() {
     this.seed.adimEkle(async (state, db) => {
-      if (state.baglanti.length) {
+      if (state.baglanti.length) await db.insert(entegratorBaglanti).values(state.baglanti)
+      // Mock şifre SecretBox ile şifrelenir (anahtar yoksa hesap atlanır)
+      if (state.lucaHesap.length && this.kutu.hazir) {
         await db
-          .insert(entegratorBaglanti)
-          .values(state.baglanti.map((b) => ({ ...b, anahtar: null })))
+          .insert(lucaHesap)
+          .values(state.lucaHesap.map((h) => ({ ...h, sifre: this.kutu.sifrele(h.sifre) })))
       }
       if (state.ebelge.length) await db.insert(ebelge).values(state.ebelge)
       if (state.berat.length) {
@@ -194,17 +200,10 @@ export class EBelgeService implements OnModuleInit {
 
     this.hatirlatma.ureticiEkle("efatura-yanit", (_bugun, simdi) => this.yanitHatirlatmalari(simdi))
 
-    this.isler.tanimla(
-      EBELGE_SENKRON_ISI,
-      async () => {
-        const s = await this.senkron(null, undefined)
-        this.logger.log(
-          `e-Belge senkronu: ${s.mukellefSayisi} mükellef, ${s.yeniFatura} yeni fatura, ${s.onaylananBerat} berat`
-        )
-      },
-      { cron: "0 6 * * *" }
-    )
   }
+
+  // Luca portalında gece senkronu yok: doğrulama ekranını çözecek personel yok, senkronu
+  // personel başlatır
 
   // --- Bağlantılar -------------------------------------------------------------------
 
@@ -238,32 +237,20 @@ export class EBelgeService implements OnModuleInit {
     if (!m) throw new NotFoundException({ message: "Mükellef bulunamadı" })
     const hata = baglantiHatasi(body)
     if (hata) throw new BadRequestException({ message: hata })
-    const anahtar = body.apiAnahtari.trim()
+    const kimlik: EntegratorKimlik = { mukellefId, lucaFirmaId: body.lucaFirmaId.trim() }
+    const [baskasi] = await this.txHost.tx
+      .select({ mukellefId: entegratorBaglanti.mukellefId })
+      .from(entegratorBaglanti)
+      .where(eq(entegratorBaglanti.lucaFirmaId, kimlik.lucaFirmaId!))
+    if (baskasi && baskasi.mukellefId !== mukellefId)
+      throw new ConflictException({ message: "Bu Luca firması başka bir mükellefe eşlenmiş" })
     // Entegratöre bağlanılırken transaction açık tutulmaz
-    const d = await this.entegrator.baglantiDogrula({
-      mukellefId,
-      apiAnahtari: anahtar,
-      ortam: body.ortam,
-    })
+    const d = await this.entegrator.baglantiDogrula(kimlik)
     if (!d.gecerli)
       throw new UnprocessableEntityException({
         message: d.hataMesaji ?? "Luca bağlantısı doğrulanamadı",
       })
-    await this.baglantiYaz(aktor, m.id, {
-      id: `n_${m.id}`,
-      mukellefId: m.id,
-      durum: "BAGLI",
-      ortam: body.ortam,
-      eFatura: d.eFatura,
-      eArsiv: d.eArsiv,
-      eDefter: d.eDefter,
-      postaKutusu: d.postaKutusu ?? null,
-      anahtar: this.kutu.sifrele(anahtar),
-      anahtarIpucu: sonDort(anahtar),
-      hataMesaji: null,
-      baglayanId: aktor.id,
-      baglanmaTarihi: this.saat.simdiIso(),
-    })
+    await this.baglantiYaz(aktor, m.id, this.baglantiSatiri(aktor, m.id, kimlik.lucaFirmaId!, d))
     return this.baglanti(m.id)
   }
 
@@ -285,8 +272,105 @@ export class EBelgeService implements OnModuleInit {
       hedefTip: "MUKELLEF",
       hedefId: mukellefId,
       mukellefId,
-      aciklama: `Luca (${satir.ortam === "TEST" ? "test" : "canlı"})`,
+      aciklama: `Luca firması ${satir.lucaFirmaId}`,
     })
+  }
+
+  private baglantiSatiri(
+    aktor: Personel,
+    mukellefId: string,
+    lucaFirmaId: string,
+    d: Omit<BaglantiDogrulamaSonucu, "gecerli" | "hataMesaji">
+  ): Omit<BaglantiSatiri, "sonSenkron"> {
+    return {
+      id: `n_${mukellefId}`,
+      mukellefId,
+      durum: "BAGLI",
+      eFatura: d.eFatura,
+      eArsiv: d.eArsiv,
+      eDefter: d.eDefter,
+      postaKutusu: d.postaKutusu ?? null,
+      lucaFirmaId,
+      hataMesaji: null,
+      baglayanId: aktor.id,
+      baglanmaTarihi: this.saat.simdiIso(),
+    }
+  }
+
+  /**
+   * Luca firmalarından mükellef (yönetici): eşli firma atlanır, VKN/TCKN'si kayıtlı mükellef
+   * firmaya eşlenir, diğerleri için mükellef açılıp eşlenir. Firma listesi bir kez okunur; her
+   * firma kendi transaction'ında yazılır, birinin hatası diğerlerini durdurmaz.
+   */
+  async lucaFirmalariniAktar(aktor: Personel, body: unknown): Promise<LucaFirmaAktarimSonucu> {
+    const hata = lucaAktarimHatasi(body)
+    if (hata) throw new BadRequestException({ message: hata })
+    const { firmaIdler, sorumluPersonelId } = body as LucaFirmaAktarimRequest
+    const firmalar = new Map((await this.oturum.firmalarHam()).map((f) => [f.firmaId, f]))
+    const eslemeler = new Set(
+      (
+        await this.txHost.tx
+          .select({ firmaId: entegratorBaglanti.lucaFirmaId })
+          .from(entegratorBaglanti)
+      ).map((b) => b.firmaId)
+    )
+    const sonuc: LucaFirmaAktarimSonucu = { olusturulan: 0, eslenen: 0, atlanan: 0, hatalar: [] }
+    for (const firmaId of new Set(firmaIdler.map((f) => f.trim()))) {
+      const f = firmalar.get(firmaId)
+      if (!f) {
+        sonuc.hatalar.push({ firmaId, unvan: "—", mesaj: "Firma Luca hesabında bulunamadı" })
+        continue
+      }
+      if (eslemeler.has(firmaId)) {
+        sonuc.atlanan++
+        continue
+      }
+      try {
+        const yeni = await this.txHost.withTransaction(async () => {
+          const kimlik = f.vknTckn?.trim()
+          const [mevcut] = kimlik
+            ? await this.txHost.tx
+                .select({ id: mukellef.id })
+                .from(mukellef)
+                .where(or(eq(mukellef.vkn, kimlik), eq(mukellef.tckn, kimlik)))
+            : []
+          const mukellefId =
+            mevcut?.id ??
+            (
+              await this.mukellefler.lucaFirmasindanOlustur(
+                aktor,
+                lucaFirmasindanMukellef(f, sorumluPersonelId)
+              )
+            ).id
+          const satir = this.baglantiSatiri(aktor, mukellefId, firmaId, f)
+          const { id: _id, mukellefId: _m, ...guncelleme } = satir
+          await this.txHost.tx
+            .insert(entegratorBaglanti)
+            .values(satir)
+            .onConflictDoUpdate({ target: entegratorBaglanti.mukellefId, set: guncelleme })
+          return !mevcut
+        })
+        if (yeni) sonuc.olusturulan++
+        else sonuc.eslenen++
+        eslemeler.add(firmaId)
+      } catch (e) {
+        if (!(e instanceof HttpException) || e.getStatus() >= 500) throw e
+        const r = e.getResponse()
+        sonuc.hatalar.push({
+          firmaId,
+          unvan: f.unvan,
+          mesaj:
+            typeof r === "object" && r && "message" in r ? String(r.message) : e.message,
+        })
+      }
+    }
+    if (sonuc.olusturulan + sonuc.eslenen > 0)
+      await this.aktiviteler.log({
+        aktorId: aktor.id,
+        eylem: "LUCA_FIRMALARI_AKTARILDI",
+        aciklama: `${sonuc.olusturulan} yeni mükellef, ${sonuc.eslenen} eşleme`,
+      })
+    return sonuc
   }
 
   @Transactional()
@@ -307,11 +391,8 @@ export class EBelgeService implements OnModuleInit {
 
   // --- Senkron -----------------------------------------------------------------------
 
-  /**
-   * Bağlı mükellefleri senkronlar. `aktor` null → zamanlanmış iş: aktör `sistem`, aktivite
-   * yalnızca değişiklik varsa ve bildirimsiz (her sabah herkese yayın gitmesin).
-   */
-  async senkron(aktor: Personel | null, mukellefId?: string): Promise<SenkronResponse> {
+  /** Bağlı mükellefleri senkronlar (personel başlatır; gece işi yok) */
+  async senkron(aktor: Personel, mukellefId?: string): Promise<SenkronResponse> {
     const kosullar: SQL[] = [
       sql`${entegratorBaglanti.durum} <> 'BAGLI_DEGIL'`,
       eq(mukellef.aktif, true),
@@ -325,7 +406,7 @@ export class EBelgeService implements OnModuleInit {
     if (mukellefId && !hedefler.length)
       throw new ConflictException({ message: "Mükellefin Luca bağlantısı yok" })
 
-    const aktorId = aktor?.id ?? SISTEM_AKTOR
+    const aktorId = aktor.id
     const yanit: SenkronResponse = {
       mukellefSayisi: 0,
       yeniFatura: 0,
@@ -346,6 +427,8 @@ export class EBelgeService implements OnModuleInit {
         yanit.guncellenenFatura += s.guncellenenFatura
         yanit.onaylananBerat += s.onaylananBerat
       } catch (e) {
+        // Doğrulama kodu bekleniyor: diğer mükellefler de aynı oturumu bekler, senkron durur
+        if (e instanceof LucaDogrulamaGerekli) throw e
         const mesaj =
           (e as { response?: { message?: string } }).response?.message ??
           "Luca'dan veri alınamadı"
@@ -354,19 +437,22 @@ export class EBelgeService implements OnModuleInit {
       }
     }
 
-    const degisti = yanit.yeniFatura + yanit.guncellenenFatura + yanit.onaylananBerat > 0
-    if (aktor || degisti) {
-      await this.aktiviteler.log(
-        {
-          aktorId,
-          eylem: "EBELGE_SENKRONIZE_EDILDI",
-          hedefTip: "EBELGE",
-          mukellefId,
-          aciklama: `${yanit.yeniFatura} yeni fatura, ${yanit.onaylananBerat} berat`,
-        },
-        aktor ? {} : false
-      )
+    if (yanit.mukellefSayisi > 0) {
+      try {
+        await this.entegrator.kontorBakiyesiOku()
+      } catch (e) {
+        if (e instanceof LucaDogrulamaGerekli) throw e
+        this.logger.warn(`Luca kontör bakiyesi okunamadı: ${(e as Error).message}`)
+      }
     }
+
+    await this.aktiviteler.log({
+      aktorId,
+      eylem: "EBELGE_SENKRONIZE_EDILDI",
+      hedefTip: "EBELGE",
+      mukellefId,
+      aciklama: `${yanit.yeniFatura} yeni fatura, ${yanit.onaylananBerat} berat`,
+    })
     return yanit
   }
 
@@ -524,61 +610,6 @@ export class EBelgeService implements OnModuleInit {
       ad,
     })
     return { dataUrl, ad }
-  }
-
-  async yanit(aktor: Personel, id: string, body: EFaturaYanitRequest): Promise<EBelgeView> {
-    const { e, b } = await this.faturaBul(id)
-    this.yanitKontrol(e, body)
-    if (b?.durum !== "BAGLI")
-      throw new ConflictException({ message: "Mükellefin Luca bağlantısı aktif değil" })
-    const neden = body.neden?.trim()
-    await this.entegrator.ticariYanitGonder(this.kimlik(b), e.ettn, body.karar, neden)
-    return this.yanitYaz(aktor, id, body)
-  }
-
-  /** Satır kilitlenir ve kurallar yeniden denetlenir: eşzamanlı ikinci yanıt 409 */
-  @Transactional()
-  private async yanitYaz(aktor: Personel, id: string, body: EFaturaYanitRequest) {
-    const tx = this.txHost.tx
-    const [kilitli] = await tx.select().from(ebelge).where(eq(ebelge.id, id)).for("update")
-    if (!kilitli) throw new NotFoundException({ message: "Fatura bulunamadı" })
-    const e = ebelgeSatirindan(kilitli)
-    this.yanitKontrol(e, body)
-    const neden = body.neden?.trim()
-    const [g] = await tx
-      .update(ebelge)
-      .set({
-        yanit: body.karar,
-        redNedeni: body.karar === "RED" ? (neden ?? null) : null,
-        yanitlayanId: aktor.id,
-        yanitTarihi: this.saat.simdiIso(),
-      })
-      .where(eq(ebelge.id, id))
-      .returning()
-    await this.aktiviteler.log({
-      aktorId: aktor.id,
-      eylem: body.karar === "KABUL" ? "EFATURA_KABUL_EDILDI" : "EFATURA_REDDEDILDI",
-      hedefTip: "EBELGE",
-      hedefId: e.id,
-      mukellefId: e.mukellefId,
-      aciklama: `${e.belgeNo} · ${e.karsiTaraf.unvan}${neden ? ` — ${neden}` : ""}`,
-    })
-    return ebelgeView(ebelgeSatirindan(g!), await this.unvan(e.mukellefId), this.saat.simdi())
-  }
-
-  private yanitKontrol(e: EBelge, body: EFaturaYanitRequest) {
-    if (e.yon !== "GELEN" || e.senaryo !== "TICARI")
-      throw new BadRequestException({ message: "Yalnızca gelen ticari faturalar yanıtlanabilir" })
-    const simdi = this.saat.simdi()
-    if (!yanitlanabilirMi(e, simdi))
-      throw new ConflictException({
-        message:
-          yanitDurumu(e, simdi) === "SURESI_DOLDU"
-            ? "8 günlük yanıt süresi dolmuş"
-            : "Bu fatura zaten yanıtlanmış",
-      })
-    const hata = yanitHatasi(body)
-    if (hata) throw new BadRequestException({ message: hata })
   }
 
   async arsiveKaydet(aktor: Personel, id: string): Promise<EBelgeView> {
@@ -756,9 +787,15 @@ export class EBelgeService implements OnModuleInit {
         m.unvan,
       ])
     )
+    const [luca] = await tx
+      .select({ bakiye: lucaHesap.kontorBakiye, tarih: lucaHesap.kontorTarihi })
+      .from(lucaHesap)
     return {
       donem,
       ...bakiye,
+      ...(luca?.bakiye != null && luca.tarih
+        ? { lucaBakiye: luca.bakiye, lucaBakiyeTarihi: luca.tarih }
+        : {}),
       aylik: sonDonemler(bugun, 6).map((d) => ({ donem: d, tuketim: donemTuketimi(belgeler, d) })),
       mukellefler: mukellefTuketimleri(belgeler, donem).map((s) => ({
         ...s,
@@ -862,21 +899,10 @@ export class EBelgeService implements OnModuleInit {
     return kontorBakiyesi(alimlar, await this.tumBelgeler(), this.bugun())
   }
 
-  private async unvan(mukellefId: string) {
-    const [m] = await this.txHost.tx
-      .select({ unvan: mukellef.unvan })
-      .from(mukellef)
-      .where(eq(mukellef.id, mukellefId))
-    return m?.unvan ?? "—"
+  private kimlik(b: BaglantiSatiri): EntegratorKimlik {
+    return { mukellefId: b.mukellefId, ...(b.lucaFirmaId ? { lucaFirmaId: b.lucaFirmaId } : {}) }
   }
 
-  private kimlik(b: BaglantiSatiri): EntegratorKimlik {
-    return {
-      mukellefId: b.mukellefId,
-      apiAnahtari: b.anahtar ? this.kutu.coz(b.anahtar) : "",
-      ortam: b.ortam,
-    }
-  }
 
   private bugun() {
     return toYmd(this.saat.simdi())
@@ -893,7 +919,6 @@ function baglantiView(
         id: `n_${m.id}`,
         mukellefId: m.id,
         durum: "BAGLI_DEGIL",
-        ortam: "CANLI",
         eFatura: false,
         eArsiv: false,
         eDefter: false,

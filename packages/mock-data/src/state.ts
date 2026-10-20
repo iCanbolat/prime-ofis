@@ -34,6 +34,7 @@ import type {
   MuhasebeFisi,
   FisHesapAyari,
   LucaAktarim,
+  LucaHesapKaydi,
   SgkErisim,
   VergiLevhasi,
   BorcSorgusu,
@@ -101,6 +102,8 @@ export interface DbState {
   fisHesapAyari: FisHesapAyari[]
   /** İndirilen Luca Excel dosyaları */
   lucaAktarim: LucaAktarim[]
+  /** Büronun Luca portal kullanıcısı (0 ya da 1 kayıt, id `buro`) */
+  lucaHesap: LucaHesapKaydi[]
   /** Mükellef × ay bordro kayıtları (yalnızca işlem yapılanlar; id = `${mukellefId}:${donem}`) */
   bordro: BordroDonemi[]
   /** İşe giriş / çıkış bildirim takibi */

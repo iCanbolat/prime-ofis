@@ -30,7 +30,12 @@ import { hasRole, useAuthStore } from "@/features/auth/store"
 import { KontorAlimDialog } from "@/features/e-belge/components/kontor-alim-dialog"
 import { ORTALAMA_AY } from "@prime/shared/e-belge/kontor"
 import { useKontor } from "@/features/e-belge/queries"
-import { formatDate, formatDonem, formatTRY } from "@prime/shared/lib/format"
+import {
+  formatDate,
+  formatDateTime,
+  formatDonem,
+  formatTRY,
+} from "@prime/shared/lib/format"
 import { cn } from "@/lib/utils"
 
 const DONEM_RE = /^\d{4}-(0[1-9]|1[0-2])$/
@@ -90,9 +95,11 @@ export function KontorPage() {
           deger={sayi(k.kalan)}
           vurgu={k.dusukBakiye}
           alt={
-            k.tahminiAy === null
-              ? `${sayi(k.toplamAlinan)} alındı`
-              : `≈ ${k.tahminiAy.toLocaleString("tr-TR")} ay yeter`
+            k.lucaBakiye !== undefined && k.lucaBakiyeTarihi
+              ? `Luca'da ${sayi(k.lucaBakiye)} · ${formatDateTime(k.lucaBakiyeTarihi)}`
+              : k.tahminiAy === null
+                ? `${sayi(k.toplamAlinan)} alındı`
+                : `≈ ${k.tahminiAy.toLocaleString("tr-TR")} ay yeter`
           }
         />
         <Gosterge

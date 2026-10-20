@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { useAuthStore } from "@/features/auth/store"
 import { ApiError, http } from "@/lib/http"
-import { STORAGE_KEY, db } from "@/mocks/db"
+import { db } from "@/mocks/db"
 import { PERSONEL } from "@prime/mock-data/factories/personel"
 import type {
   BeratListResponse,
@@ -28,8 +28,6 @@ const liste = (params: Record<string, unknown> = {}) =>
   })
 const idler = async (params: Record<string, unknown> = {}) =>
   (await liste(params)).items.map((f) => f.id)
-const yanit = (id: string, body: Record<string, unknown>) =>
-  http.post<EBelgeView>(`/e-belge/faturalar/${id}/yanit`, body)
 const hataDurumu = (p: Promise<unknown>) =>
   p.then(
     () => 0,
@@ -115,36 +113,6 @@ describe("GET /api/e-belge/faturalar/:id", () => {
     )
     expect(icerik.ad).toBe("CNR2026000000057.pdf")
     expect(icerik.dataUrl).toMatch(/^data:application\/pdf;base64,/)
-  })
-})
-
-describe("POST /api/e-belge/faturalar/:id/yanit", () => {
-  it("gelen ticari faturayı kabul eder, aktiviteye yazar, ikinci yanıt 409", async () => {
-    const f = await yanit("f_bekleyen", { karar: "KABUL" })
-    expect(f).toMatchObject({ yanit: "KABUL", yanitlayanId: mehmet.id })
-    expect(db.aktivite.all().at(-1)).toMatchObject({
-      eylem: "EFATURA_KABUL_EDILDI",
-      hedefId: "f_bekleyen",
-      mukellefId: "m_ltd",
-    })
-    expect(
-      await hataDurumu(yanit("f_bekleyen", { karar: "RED", neden: "x" }))
-    ).toBe(409)
-  })
-
-  it("red nedeni zorunlu; neden kaydedilir", async () => {
-    expect(await hataDurumu(yanit("f_yakin", { karar: "RED" }))).toBe(400)
-    expect(
-      await hataDurumu(yanit("f_yakin", { karar: "RED", neden: "  " }))
-    ).toBe(400)
-    const f = await yanit("f_yakin", { karar: "RED", neden: "Mükerrer fatura" })
-    expect(f).toMatchObject({ yanit: "RED", redNedeni: "Mükerrer fatura" })
-  })
-
-  it("süresi dolmuş, temel senaryolu veya giden fatura yanıtlanamaz", async () => {
-    expect(await hataDurumu(yanit("f_doldu", { karar: "KABUL" }))).toBe(409)
-    expect(await hataDurumu(yanit("f_temel", { karar: "KABUL" }))).toBe(400)
-    expect(await hataDurumu(yanit("f_giden", { karar: "KABUL" }))).toBe(400)
   })
 })
 
@@ -245,10 +213,9 @@ describe("POST /api/e-belge/senkron", () => {
 })
 
 describe("Luca bağlantıları", () => {
-  const baglan = (mukellefId: string, apiAnahtari: string) =>
+  const baglan = (mukellefId: string, lucaFirmaId: string) =>
     http.put<EntegratorBaglantiView>(`/e-belge/baglantilar/${mukellefId}`, {
-      apiAnahtari,
-      ortam: "TEST",
+      lucaFirmaId,
     })
 
   it("tüm aktif mükellefleri durumlarıyla listeler", async () => {
@@ -262,34 +229,29 @@ describe("Luca bağlantıları", () => {
     ])
   })
 
-  it("yalnızca yönetici bağlar; anahtar yanıtta ve depolamada yer almaz", async () => {
-    const anahtar = "nv_test_ABCDEFGHIJ123456"
-    expect(await hataDurumu(baglan("m_sahis", anahtar))).toBe(403)
+  it("yalnızca yönetici eşler; firma Luca'da olmalı ve tek mükellefe eşlenir", async () => {
+    expect(await hataDurumu(baglan("m_sahis", "L-m_sahis"))).toBe(403)
 
     oturum(yonetici)
-    expect(await hataDurumu(baglan("m_sahis", "kisa"))).toBe(422)
-    expect(await hataDurumu(baglan("m_sahis", "hatali-anahtar-0000000"))).toBe(
-      422
-    )
+    expect(await hataDurumu(baglan("m_sahis", " "))).toBe(400)
+    expect(await hataDurumu(baglan("m_sahis", "L-yok"))).toBe(422)
+    expect(await hataDurumu(baglan("m_sahis", "L-m_ltd"))).toBe(409)
 
-    const b = await baglan("m_sahis", anahtar)
+    const b = await baglan("m_sahis", "L-m_sahis")
     expect(b).toMatchObject({
       durum: "BAGLI",
-      ortam: "TEST",
-      anahtarIpucu: "3456",
+      lucaFirmaId: "L-m_sahis",
       baglayanId: yonetici.id,
     })
-    expect(JSON.stringify(b)).not.toContain(anahtar)
-    expect(localStorage.getItem(STORAGE_KEY)).not.toContain(anahtar)
     expect(db.aktivite.all().at(-1)).toMatchObject({
       eylem: "ENTEGRATOR_BAGLANDI",
       mukellefId: "m_sahis",
     })
   })
 
-  it("anahtar yenileme hatalı bağlantıyı düzeltir; kaldırma kaydı siler", async () => {
+  it("yeniden eşleme hatalı bağlantıyı düzeltir; kaldırma kaydı siler", async () => {
     oturum(yonetici)
-    const b = await baglan("m_as", "nv_live_yeni_anahtar_9999")
+    const b = await baglan("m_as", "L-m_as")
     expect(b.durum).toBe("BAGLI")
     expect(b.hataMesaji).toBeUndefined()
     await http.delete("/e-belge/baglantilar/m_as")

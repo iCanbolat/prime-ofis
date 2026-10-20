@@ -71,6 +71,20 @@
       "when": 1791924525882,
       "tag": "0009_faz7_e_belge",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792508036761,
+      "tag": "0010_luca_portal",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792508037447,
+      "tag": "0011_luca_tek_mod",
+      "breakpoints": true
     }
   ]
 }

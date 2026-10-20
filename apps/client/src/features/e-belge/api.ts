@@ -10,11 +10,16 @@ import type {
   EBelgeListResponse,
   EBelgeOzetResponse,
   EBelgeView,
-  EFaturaYanitRequest,
   EntegratorBaglantiView,
   KontorAlimRequest,
   KontorAlimView,
   KontorOzetResponse,
+  LucaDogrulamaView,
+  LucaFirma,
+  LucaFirmaAktarimRequest,
+  LucaFirmaAktarimSonucu,
+  LucaHesapRequest,
+  LucaHesapView,
   SenkronRequest,
   SenkronResponse,
 } from "@prime/shared/types/api"
@@ -41,8 +46,6 @@ export const eBelgeApi = {
     http.get<EBelgeIcerikResponse>(`/e-belge/faturalar/${id}/icerik`, {
       params: { islem },
     }),
-  yanit: (id: string, body: EFaturaYanitRequest) =>
-    http.post<EBelgeView>(`/e-belge/faturalar/${id}/yanit`, body),
   arsiveKaydet: (id: string) =>
     http.post<EBelgeView>(`/e-belge/faturalar/${id}/arsive-kaydet`),
   beratlar: (params: BeratListParams = {}) =>
@@ -53,4 +56,19 @@ export const eBelgeApi = {
     http.post<KontorAlimView>("/e-belge/kontor/alimlar", body),
   ozet: (params: { sorumlu?: string } = {}) =>
     http.get<EBelgeOzetResponse>("/e-belge/ozet", { params: { ...params } }),
+}
+
+/** Büronun Luca portal hesabı (`ENTEGRATOR=luca-portal`) */
+export const lucaApi = {
+  hesap: () => http.get<LucaHesapView>("/luca-hesap"),
+  kaydet: (body: LucaHesapRequest) =>
+    http.put<LucaHesapView>("/luca-hesap", body),
+  kaldir: () => http.delete<void>("/luca-hesap"),
+  firmalar: () => http.get<LucaFirma[]>("/luca-hesap/firmalar"),
+  firmaAktar: (body: LucaFirmaAktarimRequest) =>
+    http.post<LucaFirmaAktarimSonucu>("/luca-hesap/firmalar/aktar", body),
+  dogrulama: () => http.get<LucaDogrulamaView>("/luca-dogrulama"),
+  dogrula: (kod: string) =>
+    http.post<LucaHesapView>("/luca-dogrulama", { kod }),
+  dogrulamaYenile: () => http.post<LucaDogrulamaView>("/luca-dogrulama/yenile"),
 }

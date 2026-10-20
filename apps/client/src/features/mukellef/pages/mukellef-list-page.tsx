@@ -14,6 +14,8 @@ import { ButtonLink } from "@/components/shared/button-link"
 import { Sayfalama } from "@/components/shared/sayfalama"
 import { Button } from "@/components/ui/button"
 import { usePersonelList } from "@/features/auth/queries"
+import { hasRole, useAuthStore } from "@/features/auth/store"
+import { LucaFirmaAktarimDialog } from "@/features/e-belge/components/luca-firma-aktarim"
 import { MukellefFiltreleri } from "@/features/mukellef/components/mukellef-filtreleri"
 import { MukellefKartlari } from "@/features/mukellef/components/mukellef-kartlari"
 import { MukellefTablosu } from "@/features/mukellef/components/mukellef-tablosu"
@@ -82,6 +84,11 @@ export function MukellefListPage() {
   const personel = usePersonelList()
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [gorunum, setGorunum] = useListeGorunumu("mukellefler")
+  const yonetici = hasRole(
+    useAuthStore((s) => s.user),
+    ["YONETICI"]
+  )
+  const [lucaAktarim, setLucaAktarim] = useState(false)
 
   const personelById = useMemo(
     () =>
@@ -114,15 +121,17 @@ export function MukellefListPage() {
         description="Büronuzun takip ettiği şahıs ve şirketler"
         actions={
           <>
-            <ButtonLink variant="outline" to="/ice-aktarim/mukellefler">
-              <HugeiconsIcon
-                icon={FileImportIcon}
-                data-icon="inline-start"
-                strokeWidth={2}
-              />
-              <span className="hidden sm:inline">Excel'den içe aktar</span>
-              <span className="sm:hidden">İçe aktar</span>
-            </ButtonLink>
+            {yonetici && (
+              <Button variant="outline" onClick={() => setLucaAktarim(true)}>
+                <HugeiconsIcon
+                  icon={FileImportIcon}
+                  data-icon="inline-start"
+                  strokeWidth={2}
+                />
+                <span className="hidden sm:inline">Luca'dan aktar</span>
+                <span className="sm:hidden">Aktar</span>
+              </Button>
+            )}
             <ButtonLink to="/mukellefler/yeni">
               <HugeiconsIcon
                 icon={Add01Icon}
@@ -133,6 +142,11 @@ export function MukellefListPage() {
             </ButtonLink>
           </>
         }
+      />
+
+      <LucaFirmaAktarimDialog
+        open={lucaAktarim}
+        onClose={() => setLucaAktarim(false)}
       />
 
       <MukellefFiltreleri gorunum={gorunum} onGorunumChange={setGorunum} />
@@ -157,7 +171,7 @@ export function MukellefListPage() {
           description={
             hasFilters
               ? "Arama veya filtreleri değiştirmeyi deneyin."
-              : "Mevcut listenizi Excel'den aktarın veya ilk mükellefinizi ekleyin."
+              : "Mükelleflerinizi büronun Luca hesabındaki firmalardan aktarın veya ilk mükellefinizi ekleyin."
           }
           action={
             hasFilters ? (
@@ -166,9 +180,11 @@ export function MukellefListPage() {
               </Button>
             ) : (
               <div className="flex flex-wrap justify-center gap-2">
-                <ButtonLink to="/ice-aktarim/mukellefler">
-                  Excel'den içe aktar
-                </ButtonLink>
+                {yonetici && (
+                  <Button onClick={() => setLucaAktarim(true)}>
+                    Luca'dan aktar
+                  </Button>
+                )}
                 <ButtonLink variant="outline" to="/mukellefler/yeni">
                   Yeni mükellef
                 </ButtonLink>

@@ -417,15 +417,6 @@ export const routes: RouteObject[] = [
                 }),
               },
               {
-                path: "mukellefler",
-                handle: crumb("Mükellefler"),
-                lazy: async () => ({
-                  Component: (
-                    await import("@/features/ice-aktarim/pages/mukellef-aktarim-page")
-                  ).MukellefAktarimPage,
-                }),
-              },
-              {
                 path: "sifreler",
                 handle: crumb("Şifreler"),
                 lazy: async () => ({
@@ -582,6 +573,21 @@ export const routes: RouteObject[] = [
                     Component: () => (
                       <RequireRole roles={["YONETICI"]}>
                         <LucaSablonuPage />
+                      </RequireRole>
+                    ),
+                  }
+                },
+              },
+              {
+                path: "luca-hesap",
+                handle: crumb("Luca Hesabı"),
+                lazy: async () => {
+                  const { LucaHesapPage } =
+                    await import("@/features/e-belge/pages/luca-hesap-page")
+                  return {
+                    Component: () => (
+                      <RequireRole roles={["YONETICI"]}>
+                        <LucaHesapPage />
                       </RequireRole>
                     ),
                   }

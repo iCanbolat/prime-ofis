@@ -3,14 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useAuthStore } from "@/features/auth/store"
 import { decryptJson, encryptJson } from "@/lib/crypto"
 import { ApiError, http } from "@/lib/http"
-import { generateVkn } from "@prime/shared/lib/tax-id"
 import { db } from "@/mocks/db"
 import { PERSONEL } from "@prime/mock-data/factories/personel"
 import { demoKasaAnahtari } from "@/test/kasa"
 import type {
   AcilisTopluRequest,
   CredentialTopluRequest,
-  MukellefInput,
   TopluAktarimSonucu,
 } from "@prime/shared/types/api"
 
@@ -18,56 +16,12 @@ const [yonetici, mehmet] = PERSONEL as [
   (typeof PERSONEL)[0],
   (typeof PERSONEL)[0],
 ]
-const YENI_VKN = generateVkn(() => 0.37)
-
-const mukellef = (ek: Partial<MukellefInput> = {}): MukellefInput => ({
-  tur: "LTD",
-  unvan: "Yeni Ltd",
-  vkn: YENI_VKN,
-  vergiDairesi: "Kadıköy",
-  naceKodu: "",
-  faaliyet: "",
-  telefon: "",
-  eposta: "",
-  il: "",
-  ilce: "",
-  adres: "",
-  sorumluPersonelId: "p_2",
-  kdvMukellefi: true,
-  kdvPeriyodu: "AYLIK",
-  defterTuru: "BILANCO",
-  sgkIsyeriVar: false,
-  calisanSayisi: 0,
-  eDefterMukellefi: false,
-  aktif: true,
-  etiketler: [],
-  ...ek,
-})
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 8, 23, 10, 0) })
   useAuthStore.setState({ user: mehmet })
 })
 afterEach(() => vi.useRealTimers())
-
-describe("POST /api/mukellefler/toplu", () => {
-  it("yeni mükellefleri ekler, kayıtlı VKN'yi atlar, geçersiz satırı raporlar", async () => {
-    const sonuc = await http.post<TopluAktarimSonucu>("/mukellefler/toplu", {
-      kayitlar: [
-        { satir: 2, mukellef: mukellef() },
-        { satir: 3, mukellef: mukellef({ vkn: "0174520662" }) },
-        { satir: 4, mukellef: mukellef({ vkn: "1" }) },
-      ],
-    })
-    expect(sonuc).toEqual({
-      olusturulan: 1,
-      guncellenen: 0,
-      atlanan: 1,
-      hatalar: [{ satir: 4, mesaj: "Geçerli bir VKN giriniz" }],
-    })
-    expect(db.mukellef.where((m) => m.vkn === YENI_VKN)).toHaveLength(1)
-  })
-})
 
 describe("POST /api/kasa/credentials/toplu", () => {
   it("şifreli kayıtları ekler; mevcut kayıt yalnızca üzerine yaz ile güncellenir", async () => {

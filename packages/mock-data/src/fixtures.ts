@@ -15,6 +15,7 @@ import type {
   EBelge,
   EDefterBerat,
   EntegratorBaglanti,
+  LucaHesapKaydi,
   KontorAlim,
   CariHareket,
   Tebligat,
@@ -413,18 +414,32 @@ export const FIXTURE_GOREVLER: Gorev[] = [
   },
 ]
 
+/**
+ * Büronun Luca hesabı bağlı (mock şifre). Kullanıcı adında "dogrulama" geçseydi her girişte kod
+ * istenirdi; testler bunu ayrıca kurar.
+ */
+export const FIXTURE_LUCA_HESAP: LucaHesapKaydi = {
+  id: "buro",
+  kullanici: "12345678901",
+  sifre: "luca-demo-sifre",
+  sifreIpucu: "ifre",
+  durum: "BAGLI",
+  sonGiris: "2026-09-22T06:00:00.000Z",
+  guncelleyenId: "p_1",
+  guncellemeTarihi: "2025-01-10T09:00:00.000Z",
+}
+
 /** m_ltd bağlı (e-Fatura, e-Arşiv, e-Defter); m_as bağlantı hatalı; m_sahis bağlı değil. */
 export const FIXTURE_BAGLANTI: EntegratorBaglanti[] = [
   {
     id: "n_m_ltd",
     mukellefId: "m_ltd",
     durum: "BAGLI",
-    ortam: "CANLI",
     eFatura: true,
     eArsiv: true,
     eDefter: true,
     postaKutusu: "urn:mail:defaultpk@cinaryazilim.com.tr",
-    anahtarIpucu: "x7k2",
+    lucaFirmaId: "L-m_ltd",
     sonSenkron: "2026-09-22T06:00:00.000Z",
     baglayanId: "p_1",
     baglanmaTarihi: "2025-01-10T09:00:00.000Z",
@@ -433,14 +448,14 @@ export const FIXTURE_BAGLANTI: EntegratorBaglanti[] = [
     id: "n_m_as",
     mukellefId: "m_as",
     durum: "HATA",
-    ortam: "CANLI",
     eFatura: true,
     eArsiv: true,
     eDefter: true,
     postaKutusu: "urn:mail:defaultpk@ozturkinsaat.com.tr",
-    anahtarIpucu: "9qa1",
+    lucaFirmaId: "L-m_as",
     sonSenkron: "2026-08-14T06:00:00.000Z",
-    hataMesaji: "Luca web servis anahtarı geçersiz veya süresi dolmuş (401)",
+    hataMesaji:
+      "Firma Luca hesabında bulunamadı; Luca'da firma yetkisini kontrol edin",
     baglayanId: "p_1",
     baglanmaTarihi: "2025-01-10T09:00:00.000Z",
   },
@@ -967,6 +982,7 @@ export function createFixtureState(): DbState {
     fis: structuredClone(FIXTURE_FISLER),
     fisHesapAyari: [],
     lucaAktarim: [],
+    lucaHesap: [structuredClone(FIXTURE_LUCA_HESAP)],
     bordro: [],
     isHareketi: [],
     sgkErisim: [],

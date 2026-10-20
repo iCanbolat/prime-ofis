@@ -112,6 +112,19 @@ export function createSeed(seed: number = DEFAULT_SEED): DbState {
     fis: fisAktarimi.fis,
     fisHesapAyari: [],
     lucaAktarim: [],
+    // Demo büro Luca'ya bağlı başlar; mock şifre (backend seed'i SecretBox ile şifreler)
+    lucaHesap: [
+      {
+        id: "buro",
+        kullanici: "12345678901",
+        sifre: "luca-demo-sifre",
+        sifreIpucu: "ifre",
+        durum: "BAGLI",
+        sonGiris: "2026-09-01T06:00:00.000Z",
+        guncelleyenId: "p_1",
+        guncellemeTarihi: "2025-01-10T09:00:00.000Z",
+      },
+    ],
     ...borc,
   }
 }

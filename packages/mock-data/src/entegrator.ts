@@ -1,16 +1,17 @@
 /**
- * Mock Luca entegratörünün deterministik üretimi — client MSW adaptörü ve api'nin
- * `MockEntegrator`'ı aynı sonuçları versin diye ortak. Mevcut durumu çağıran okur.
+ * Mock Luca portalının deterministik üretimi (`luca-portal.ts`) — client MSW ve api aynı
+ * sonuçları versin diye ortak. Mevcut durumu çağıran okur.
  */
 import { Faker, base, en, tr } from "@faker-js/faker"
 
 import type {
   BaglantiDogrulamaSonucu,
+  EntegratorBerat,
   EntegratorFatura,
 } from "@prime/shared/e-belge/entegrator-adapter"
 import { toYmd } from "@prime/shared/lib/tarih"
 import type { EBelgeKalem } from "@prime/shared/types/api"
-import type { EBelge, Mukellef } from "@prime/shared/types/domain"
+import type { EBelge, EDefterBerat, Mukellef } from "@prime/shared/types/domain"
 
 import { belgeNo, faturaUret } from "./factories/e-belge"
 import { karma } from "./karma"
@@ -32,29 +33,58 @@ const HIZMETLER: [string, string][] = [
   ["Reklam hizmeti", "Adet"],
 ]
 
-/** Anahtar doğrulama: en az 16 karakter; "hatali" içeren anahtar reddedilir */
-export function mockBaglantiDogrula(
-  apiAnahtari: string,
+/** Firmanın Luca'da açık servisleri (GİB kayıtlı kullanıcı durumu): mükelleften deterministik */
+export function mockFirmaServisleri(
   mukellefId: string,
   m: Pick<Mukellef, "eposta" | "tur" | "eDefterMukellefi"> | undefined
-): BaglantiDogrulamaSonucu {
-  if (apiAnahtari.length < 16 || /hatali/i.test(apiAnahtari))
-    return {
-      gecerli: false,
-      hataMesaji: "Luca web servis anahtarı doğrulanamadı (401)",
-      eFatura: false,
-      eArsiv: false,
-      eDefter: false,
-    }
+): Omit<BaglantiDogrulamaSonucu, "gecerli" | "hataMesaji"> {
   const alan = m?.eposta.split("@")[1] ?? "firma.com.tr"
   const eFatura = m?.tur !== "SAHIS" || karma(mukellefId) % 2 === 0
   return {
-    gecerli: true,
     eFatura,
     eArsiv: true,
     eDefter: Boolean(m?.eDefterMukellefi),
     postaKutusu: eFatura ? `urn:mail:defaultpk@${alan}` : undefined,
   }
+}
+
+/**
+ * Artımlı senkronun portal tarafı: GİB'de işlenen giden faturalar tamamlanır, gelen e-Fatura
+ * kutusuna mevcut adetten deterministik 0–2 fatura düşer.
+ */
+export function mockFaturaGuncellemeleri(
+  mukellefId: string,
+  mevcut: EBelge[],
+  { tur, yon }: { tur: EBelge["tur"]; yon: EBelge["yon"] },
+  simdi: Date
+): EntegratorFatura[] {
+  if (yon === "GIDEN")
+    return mevcut
+      .filter((e) => e.yon === "GIDEN" && e.tur === tur && e.gibDurumu === "ISLENIYOR")
+      .map(
+        ({
+          id: _id,
+          mukellefId: _m,
+          yanit: _y,
+          redNedeni: _r,
+          yanitlayanId: _yi,
+          yanitTarihi: _yt,
+          arsivDosyaId: _a,
+          ...f
+        }): EntegratorFatura => ({ ...f, gibDurumu: "BASARILI" })
+      )
+  if (tur !== "E_FATURA") return []
+  return mockGelenFaturalar(mukellefId, mevcut.length, simdi)
+}
+
+/** Yüklenmiş (berat bekleyen) defterlerin beratı onaylanır */
+export function mockBeratGuncellemeleri(
+  beratlar: EDefterBerat[],
+  simdiIso: string
+): EntegratorBerat[] {
+  return beratlar.map(({ id: _id, mukellefId: _m, ...b }) =>
+    b.durum === "YUKLENDI" ? { ...b, durum: "ONAYLANDI", onayTarihi: simdiIso } : b
+  )
 }
 
 /**
@@ -118,10 +148,4 @@ export function mockFaturaKalemleri(
       tutar,
     }
   })
-}
-
-/** Minimal UBL XML (data URL) */
-export function mockFaturaXml(ad: string, ettn: string) {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><Invoice><ID>${ad}</ID><UUID>${ettn}</UUID></Invoice>`
-  return `data:application/xml;base64,${btoa(xml)}`
 }

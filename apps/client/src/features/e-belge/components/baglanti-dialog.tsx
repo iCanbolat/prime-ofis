@@ -1,4 +1,5 @@
-import { useForm, Controller } from "react-hook-form"
+import { useState } from "react"
+import { Link } from "react-router"
 import {
   Select,
   SelectContent,
@@ -6,10 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -25,121 +25,159 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { useBaglantiKaydet } from "@/features/e-belge/queries"
-import { ORTAM_ETIKET } from "@prime/shared/e-belge/sabitler"
-import { ApiError } from "@/lib/http"
-import { z } from "@prime/shared/lib/zod"
+import { LucaDogrulamaDialog } from "@/features/e-belge/components/luca-dogrulama"
+import {
+  lucaDogrulamaBekliyor,
+  useBaglantiKaydet,
+  useLucaFirmalar,
+} from "@/features/e-belge/queries"
 import type { EntegratorBaglantiView } from "@prime/shared/types/api"
-import type { EntegratorOrtam } from "@prime/shared/types/domain"
-
-const baglantiSchema = z.object({
-  apiAnahtari: z.string().trim().min(16, "Anahtar en az 16 karakter olmalı"),
-  ortam: z.enum(["TEST", "CANLI"]),
-})
-
-type BaglantiFormValues = z.infer<typeof baglantiSchema>
 
 /**
- * Anahtar yalnızca bu formun (bellekteki) durumunda yaşar: backend'e bir kez gönderilir,
- * pencere kapanınca form yok olur. Yanıtta anahtarın yalnızca son 4 karakteri döner.
+ * Mükellef, büronun Luca hesabındaki firmalardan birine eşlenir. Önce aynı VKN/TCKN'li, yoksa
+ * aynı unvanlı firma önerilir; başka mükellefe eşlenmiş firmalar seçilemez.
  */
-function BaglantiForm({
+function LucaFirmaFormu({
   baglanti,
   onClose,
 }: {
   baglanti: EntegratorBaglantiView
   onClose: () => void
 }) {
+  const firmalar = useLucaFirmalar()
   const kaydet = useBaglantiKaydet()
-  const { register, handleSubmit, control, setError, formState } =
-    useForm<BaglantiFormValues>({
-      resolver: zodResolver(baglantiSchema),
-      defaultValues: { apiAnahtari: "", ortam: baglanti.ortam },
-    })
+  const [dogrulama, setDogrulama] = useState(false)
+  const [secim, setSecim] = useState<string | null>(null)
+  const [hata, setHata] = useState<string>()
 
-  const onSubmit = handleSubmit(async (values) => {
-    try {
-      await kaydet.mutateAsync({ mukellefId: baglanti.mukellefId, ...values })
-      toast.success(`${baglanti.mukellefUnvan} Luca'ya bağlandı`)
-      onClose()
-    } catch (error) {
-      // 422: Luca anahtarı reddetti → alana yaz
-      if (error instanceof ApiError && error.status === 422)
-        setError("apiAnahtari", { message: error.message })
-      else toast.error(error instanceof Error ? error.message : "Kaydedilemedi")
-    }
-  })
-
-  const hata = formState.errors.apiAnahtari?.message
+  const kucuk = (s: string) => s.toLocaleLowerCase("tr-TR")
+  const bos = firmalar.data?.filter((f) => !f.mukellefId) ?? []
+  const oneri =
+    baglanti.lucaFirmaId ??
+    bos.find((f) => f.eslesenMukellefId === baglanti.mukellefId)?.firmaId ??
+    bos.find((f) => kucuk(f.unvan) === kucuk(baglanti.mukellefUnvan))
+      ?.firmaId ??
+    null
+  const firmaId = secim ?? oneri
+  const secenekler = Object.fromEntries(
+    (firmalar.data ?? []).map((f) => [
+      f.firmaId,
+      f.vknTckn ? `${f.unvan} (${f.vknTckn})` : f.unvan,
+    ])
+  )
   const yenileme = baglanti.durum !== "BAGLI_DEGIL"
 
-  return (
-    <form onSubmit={onSubmit} noValidate className="grid gap-4">
-      <DialogHeader>
-        <DialogTitle>
-          {yenileme ? "Luca bağlantısını yenile" : "Luca'ya bağla"}
-        </DialogTitle>
-        <DialogDescription>{baglanti.mukellefUnvan}</DialogDescription>
-      </DialogHeader>
-      <FieldGroup>
-        <Field data-invalid={Boolean(hata) || undefined}>
-          <FieldLabel htmlFor="entegrator-anahtar">
-            Web servis anahtarı
-          </FieldLabel>
-          <Input
-            id="entegrator-anahtar"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={Boolean(hata) || undefined}
-            {...register("apiAnahtari")}
-          />
-          <FieldDescription>
-            Luca e-Entegratör portalında mükellef için tanımlanan web servis
-            anahtarı. Anahtar sunucuda şifreli saklanır; bir daha
-            görüntülenemez.
-            {yenileme && baglanti.anahtarIpucu && (
-              <> Mevcut anahtar: ••••{baglanti.anahtarIpucu}</>
-            )}
-          </FieldDescription>
-          <FieldError>{hata}</FieldError>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="entegrator-ortam">Ortam</FieldLabel>
-          <Controller
-            control={control}
-            name="ortam"
-            render={({ field }) => (
-              <Select
-                items={ORTAM_ETIKET}
-                value={field.value}
-                onValueChange={(v) => v && field.onChange(v as EntegratorOrtam)}
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!firmaId) {
+      setHata("Luca firması seçin")
+      return
+    }
+    try {
+      await kaydet.mutateAsync({
+        mukellefId: baglanti.mukellefId,
+        lucaFirmaId: firmaId,
+      })
+      toast.success(`${baglanti.mukellefUnvan} Luca firmasına eşlendi`)
+      onClose()
+    } catch (error) {
+      if (lucaDogrulamaBekliyor(error)) setDogrulama(true)
+      else setHata(error instanceof Error ? error.message : "Kaydedilemedi")
+    }
+  }
+
+  let govde: React.ReactNode
+  if (firmalar.isError) {
+    const dogrulamaGerekli = lucaDogrulamaBekliyor(firmalar.error)
+    govde = (
+      <div className="grid gap-2 text-sm">
+        <p className="text-muted-foreground">
+          {dogrulamaGerekli
+            ? "Luca firma listesi için doğrulama kodu gerekiyor."
+            : firmalar.error.message}
+        </p>
+        <div>
+          {dogrulamaGerekli ? (
+            <Button type="button" size="sm" onClick={() => setDogrulama(true)}>
+              Kodu gir
+            </Button>
+          ) : (
+            <Link
+              to="/ayarlar/luca-hesap"
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+            >
+              Luca hesabına git
+            </Link>
+          )}
+        </div>
+      </div>
+    )
+  } else if (!firmalar.data) {
+    govde = <p className="text-sm text-muted-foreground">Firmalar alınıyor…</p>
+  } else {
+    govde = (
+      <Field data-invalid={Boolean(hata) || undefined}>
+        <FieldLabel htmlFor="luca-firma">Luca firması</FieldLabel>
+        <Select
+          items={secenekler}
+          value={firmaId}
+          onValueChange={(v) => {
+            setSecim(v as string | null)
+            setHata(undefined)
+          }}
+        >
+          <SelectTrigger id="luca-firma" className="w-full">
+            <SelectValue placeholder="Firma seçin" />
+          </SelectTrigger>
+          <SelectContent>
+            {firmalar.data.map((f) => (
+              <SelectItem
+                key={f.firmaId}
+                value={f.firmaId}
+                disabled={Boolean(
+                  f.mukellefId && f.mukellefId !== baglanti.mukellefId
+                )}
               >
-                <SelectTrigger id="entegrator-ortam" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(ORTAM_ETIKET) as EntegratorOrtam[]).map((o) => (
-                    <SelectItem key={o} value={o}>
-                      {ORTAM_ETIKET[o]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-        </Field>
-      </FieldGroup>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
-          Vazgeç
-        </Button>
-        <Button type="submit" disabled={formState.isSubmitting}>
-          {formState.isSubmitting ? "Doğrulanıyor…" : "Bağla"}
-        </Button>
-      </DialogFooter>
-    </form>
+                {secenekler[f.firmaId]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          Büronun Luca hesabında görünen firmalar. Faturalar ve beratlar bu
+          firmadan okunur; ticari kabul / red Luca'da verilir.
+        </FieldDescription>
+        <FieldError>{hata}</FieldError>
+      </Field>
+    )
+  }
+
+  // Doğrulama penceresi formun dışında: portal olayları React ağacında dış forma kabarcıklanır
+  return (
+    <>
+      <form onSubmit={onSubmit} noValidate className="grid gap-4">
+        <DialogHeader>
+          <DialogTitle>
+            {yenileme ? "Luca eşlemesini değiştir" : "Luca firmasına eşle"}
+          </DialogTitle>
+          <DialogDescription>{baglanti.mukellefUnvan}</DialogDescription>
+        </DialogHeader>
+        <FieldGroup>{govde}</FieldGroup>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Vazgeç
+          </Button>
+          <Button type="submit" disabled={kaydet.isPending || !firmalar.data}>
+            {kaydet.isPending ? "Doğrulanıyor…" : "Eşle"}
+          </Button>
+        </DialogFooter>
+      </form>
+      <LucaDogrulamaDialog
+        open={dogrulama}
+        onClose={() => setDogrulama(false)}
+        onCozuldu={() => void firmalar.refetch()}
+      />
+    </>
   )
 }
 
@@ -156,7 +194,7 @@ export function BaglantiDialog({
       onOpenChange={(open) => !open && onClose()}
     >
       <DialogContent className="sm:max-w-md">
-        {baglanti && <BaglantiForm baglanti={baglanti} onClose={onClose} />}
+        {baglanti && <LucaFirmaFormu baglanti={baglanti} onClose={onClose} />}
       </DialogContent>
     </Dialog>
   )

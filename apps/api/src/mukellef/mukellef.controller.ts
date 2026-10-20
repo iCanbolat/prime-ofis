@@ -19,12 +19,6 @@ export class MukellefController {
     return this.mukellefler.olustur(aktor, body)
   }
 
-  @Post("toplu")
-  @HttpCode(200)
-  toplu(@Aktor() aktor: Personel, @Body() body: unknown) {
-    return this.mukellefler.toplu(aktor, body)
-  }
-
   @Post("toplu-atama")
   @HttpCode(200)
   topluAtama(@Aktor() aktor: Personel, @Body() body: unknown) {

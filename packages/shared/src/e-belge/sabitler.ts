@@ -7,7 +7,6 @@ import type {
   EFaturaYanit,
   GibDurumu,
   EntegratorBaglantiDurumu,
-  EntegratorOrtam,
 } from "../types/domain"
 
 export const EBELGE_TUR_ETIKET: Record<EBelgeTur, string> = {
@@ -59,18 +58,5 @@ export const BAGLANTI_DURUM_ETIKET: Record<EntegratorBaglantiDurumu, string> = {
   HATA: "Bağlantı hatası",
   BAGLI_DEGIL: "Bağlı değil",
 }
-
-export const ORTAM_ETIKET: Record<EntegratorOrtam, string> = {
-  TEST: "Test",
-  CANLI: "Canlı",
-}
-
-/** Ticari fatura reddinde hazır nedenler */
-export const RED_NEDENLERI = [
-  "Mal / hizmet teslim alınmadı",
-  "Fiyat veya miktar hatalı",
-  "Fatura bilgileri hatalı (unvan / VKN)",
-  "Mükerrer fatura",
-]
 
 export const SAYFA_BOYUTU = 20

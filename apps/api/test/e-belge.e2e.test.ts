@@ -25,7 +25,6 @@ import {
   kontorAlim,
   takvimDurum,
 } from "../src/db/schema/index.js"
-import { EBelgeService } from "../src/e-belge/e-belge.service.js"
 import { HatirlatmaService } from "../src/hatirlatma/hatirlatma.service.js"
 import { testUygulamasi, type Istemci, type TestUygulamasi } from "./harness.js"
 
@@ -149,49 +148,8 @@ describe("e-Belge", () => {
     })
   })
 
-  describe("ticari yanıt", () => {
-    it("gelen ticari faturayı kabul eder, aktiviteye yazar, ikinci yanıt 409", async () => {
-      const f = await yanit("f_bekleyen", { karar: "KABUL" })
-      expect(f.statusCode).toBe(200)
-      expect(f.json<EBelgeView>()).toMatchObject({ yanit: "KABUL", yanitlayanId: MEHMET })
-      expect(await sonAktivite("EFATURA_KABUL_EDILDI")).toMatchObject({
-        hedefId: "f_bekleyen",
-        mukellefId: "m_ltd",
-      })
-      expect((await yanit("f_bekleyen", { karar: "RED", neden: "x" })).json()).toEqual({
-        message: "Bu fatura zaten yanıtlanmış",
-      })
-    })
-
-    it("eşzamanlı iki yanıttan biri kazanır", async () => {
-      const sonuclar = await Promise.all([
-        yanit("f_bekleyen", { karar: "KABUL" }),
-        yanit("f_bekleyen", { karar: "RED", neden: "Mükerrer" }),
-      ])
-      expect(sonuclar.map((s) => s.statusCode).sort()).toEqual([200, 409])
-    })
-
-    it("red nedeni zorunlu; neden kaydedilir", async () => {
-      expect((await yanit("f_yakin", { karar: "RED" })).statusCode).toBe(400)
-      expect((await yanit("f_yakin", { karar: "RED", neden: "  " })).statusCode).toBe(400)
-      const f = await yanit("f_yakin", { karar: "RED", neden: "Mükerrer fatura" })
-      expect(f.json()).toMatchObject({ yanit: "RED", redNedeni: "Mükerrer fatura" })
-    })
-
-    it("süresi dolmuş, temel senaryolu veya giden fatura yanıtlanamaz; pasif bağlantı 409", async () => {
-      expect((await yanit("f_doldu", { karar: "KABUL" })).json()).toEqual({
-        message: "8 günlük yanıt süresi dolmuş",
-      })
-      expect((await yanit("f_temel", { karar: "KABUL" })).statusCode).toBe(400)
-      expect((await yanit("f_giden", { karar: "KABUL" })).statusCode).toBe(400)
-      await t.db
-        .update(entegratorBaglanti)
-        .set({ durum: "HATA" })
-        .where(eq(entegratorBaglanti.mukellefId, "m_ltd"))
-      expect((await yanit("f_bekleyen", { karar: "KABUL" })).json()).toEqual({
-        message: "Mükellefin Luca bağlantısı aktif değil",
-      })
-    })
+  it("ticari yanıt uygulamadan gönderilmez (Luca'da verilir)", async () => {
+    expect((await yanit("f_bekleyen", { karar: "KABUL" })).statusCode).toBe(404)
   })
 
   describe("arşive kaydet", () => {
@@ -304,28 +262,11 @@ describe("e-Belge", () => {
         message: "Mükellefin Luca bağlantısı yok",
       })
     })
-
-    it("zamanlanmış senkron: aktör sistem, bildirim üretmez", async () => {
-      const oncekiBildirim = (await t.db.select().from(bildirim)).length
-      const s = await t.app.get(EBelgeService).senkron(null)
-      expect(s.mukellefSayisi).toBe(1)
-      expect(await sonAktivite("EBELGE_SENKRONIZE_EDILDI")).toMatchObject({
-        aktorId: "sistem",
-      })
-      const takvim = await t.db
-        .select()
-        .from(takvimDurum)
-        .where(and(eq(takvimDurum.mukellefId, "m_ltd"), eq(takvimDurum.donem, "2026-06")))
-      expect(takvim[0]?.guncelleyenId).toBe("sistem")
-      // Beyan durumu bildirimi sorumluya gider; senkron yayını gitmez
-      const yeni = (await t.db.select().from(bildirim)).slice(oncekiBildirim)
-      expect(yeni.some((b) => b.tur === "EBELGE_SENKRONIZE_EDILDI")).toBe(false)
-    })
   })
 
   describe("Luca bağlantıları", () => {
-    const baglan = (kim: Istemci, mukellefId: string, apiAnahtari: string) =>
-      kim.put(`/e-belge/baglantilar/${mukellefId}`, { apiAnahtari, ortam: "TEST" })
+    const baglan = (kim: Istemci, mukellefId: string, lucaFirmaId: string) =>
+      kim.put(`/e-belge/baglantilar/${mukellefId}`, { lucaFirmaId })
 
     it("tüm aktif mükellefleri durumlarıyla listeler", async () => {
       const l = (await ben.get("/e-belge/baglantilar")).json<EntegratorBaglantiView[]>()
@@ -337,43 +278,37 @@ describe("e-Belge", () => {
       expect((await ben.get("/e-belge/baglantilar/m_yok")).statusCode).toBe(404)
     })
 
-    it("yalnızca yönetici bağlar; anahtar şifreli saklanır, yanıtta yer almaz", async () => {
-      const anahtar = "nv_test_ABCDEFGHIJ123456"
-      expect((await baglan(ben, "m_sahis", anahtar)).statusCode).toBe(403)
-      expect((await baglan(yonetici, "m_sahis", "kisa")).statusCode).toBe(422)
-      expect((await baglan(yonetici, "m_sahis", "hatali-anahtar-0000000")).json()).toEqual({
-        message: "Luca web servis anahtarı doğrulanamadı (401)",
+    it("yalnızca yönetici eşler; firma Luca'da olmalı ve tek mükellefe eşlenir", async () => {
+      expect((await baglan(ben, "m_sahis", "L-m_sahis")).statusCode).toBe(403)
+      expect((await baglan(yonetici, "m_sahis", " ")).json()).toEqual({
+        message: "Luca firması seçilmelidir",
       })
-      expect(
-        (await yonetici.put("/e-belge/baglantilar/m_sahis", { apiAnahtari: anahtar, ortam: "X" })).json()
-      ).toEqual({ message: "Geçersiz ortam" })
+      expect((await baglan(yonetici, "m_sahis", "L-yok")).json()).toEqual({
+        message: "Firma Luca hesabında bulunamadı",
+      })
+      expect((await baglan(yonetici, "m_sahis", "L-m_ltd")).json()).toEqual({
+        message: "Bu Luca firması başka bir mükellefe eşlenmiş",
+      })
 
-      const y = await baglan(yonetici, "m_sahis", anahtar)
-      expect(y.statusCode).toBe(200)
+      const y = await baglan(yonetici, "m_sahis", "L-m_sahis")
+      expect(y.statusCode, y.body).toBe(200)
       expect(y.json()).toMatchObject({
         durum: "BAGLI",
-        ortam: "TEST",
-        anahtarIpucu: "3456",
+        lucaFirmaId: "L-m_sahis",
         baglayanId: YONETICI,
       })
-      expect(y.body).not.toContain(anahtar)
-      const [s] = await t.db
-        .select()
-        .from(entegratorBaglanti)
-        .where(eq(entegratorBaglanti.mukellefId, "m_sahis"))
-      expect(s!.anahtar).toMatch(/^v1:/)
       expect(await sonAktivite("ENTEGRATOR_BAGLANDI")).toMatchObject({
         mukellefId: "m_sahis",
-        aciklama: "Luca (test)",
+        aciklama: "Luca firması L-m_sahis",
       })
     })
 
-    it("anahtar yenileme hatalı bağlantıyı düzeltir, son senkronu korur; kaldırma kaydı siler", async () => {
+    it("yeniden eşleme hatalı bağlantıyı düzeltir, son senkronu korur; kaldırma kaydı siler", async () => {
       await t.db
         .update(entegratorBaglanti)
         .set({ sonSenkron: "2026-09-01T06:00:00.000Z" })
         .where(eq(entegratorBaglanti.mukellefId, "m_as"))
-      const b = (await baglan(yonetici, "m_as", "nv_live_yeni_anahtar_9999")).json<EntegratorBaglantiView>()
+      const b = (await baglan(yonetici, "m_as", "L-m_as")).json<EntegratorBaglantiView>()
       expect(b).toMatchObject({ durum: "BAGLI", sonSenkron: "2026-09-01T06:00:00.000Z" })
       expect(b.hataMesaji).toBeUndefined()
       expect((await yonetici.delete("/e-belge/baglantilar/m_as")).statusCode).toBe(204)

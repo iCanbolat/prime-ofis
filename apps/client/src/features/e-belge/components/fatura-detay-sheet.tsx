@@ -1,35 +1,18 @@
-import { useState, type FormEvent, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { Link } from "react-router"
 import { toast } from "sonner"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Archive02Icon,
-  Cancel01Icon,
   FolderLibraryIcon,
-  Tick02Icon,
   ViewIcon,
 } from "@hugeicons/core-free-icons"
 
-import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { ButtonLink } from "@/components/shared/button-link"
 import { ErrorState, LoadingState } from "@/components/shared/query-states"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Field,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -46,7 +29,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Textarea } from "@/components/ui/textarea"
 import {
   OnizlemeDialog,
   type OnizlenecekDosya,
@@ -61,16 +43,11 @@ import {
   yanitlanabilirMi,
   yanitSonTarihi,
 } from "@prime/shared/e-belge/kurallar"
-import {
-  useArsiveKaydet,
-  useFatura,
-  useFaturaYanit,
-} from "@/features/e-belge/queries"
+import { useArsiveKaydet, useFatura } from "@/features/e-belge/queries"
 import {
   EBELGE_TUR_ETIKET,
   EBELGE_YON_ETIKET,
   FATURA_TIPI_ETIKET,
-  RED_NEDENLERI,
   SENARYO_ETIKET,
 } from "@prime/shared/e-belge/sabitler"
 import { formatDate, formatDateTime } from "@prime/shared/lib/format"
@@ -85,110 +62,9 @@ function Bilgi({ etiket, children }: { etiket: string; children: ReactNode }) {
   )
 }
 
-function RedDialog({
-  fatura,
-  open,
-  onOpenChange,
-}: {
-  fatura: EBelgeDetay
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const yanit = useFaturaYanit()
-  const [neden, setNeden] = useState("")
-  const [hata, setHata] = useState<string>()
-
-  const kapat = () => {
-    setNeden("")
-    setHata(undefined)
-    onOpenChange(false)
-  }
-
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    if (!neden.trim()) {
-      setHata("Red nedeni zorunludur")
-      return
-    }
-    yanit.mutate(
-      { id: fatura.id, karar: "RED", neden: neden.trim() },
-      {
-        onSuccess: () => {
-          toast.success("Fatura reddedildi, yanıt satıcıya iletildi")
-          kapat()
-        },
-        onError: (error) => toast.error(error.message),
-      }
-    )
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && kapat()}>
-      <DialogContent>
-        <form onSubmit={onSubmit} noValidate className="grid gap-4">
-          <DialogHeader>
-            <DialogTitle>Faturayı reddet</DialogTitle>
-            <DialogDescription>
-              {fatura.belgeNo} · {fatura.karsiTaraf.unvan}. Red yanıtı GİB
-              üzerinden satıcıya iletilir ve geri alınamaz.
-            </DialogDescription>
-          </DialogHeader>
-          <FieldGroup>
-            <Field data-invalid={Boolean(hata) || undefined}>
-              <FieldLabel htmlFor="fatura-red-neden">Red nedeni</FieldLabel>
-              <Textarea
-                id="fatura-red-neden"
-                rows={2}
-                value={neden}
-                aria-invalid={Boolean(hata) || undefined}
-                onChange={(e) => {
-                  setNeden(e.target.value)
-                  setHata(undefined)
-                }}
-              />
-              <div className="flex flex-wrap gap-1.5">
-                {RED_NEDENLERI.map((n) => (
-                  <Button
-                    key={n}
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    onClick={() => {
-                      setNeden(n)
-                      setHata(undefined)
-                    }}
-                  >
-                    {n}
-                  </Button>
-                ))}
-              </div>
-              <FieldError>{hata}</FieldError>
-            </Field>
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={kapat}>
-              Vazgeç
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={yanit.isPending}
-            >
-              Reddet
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 function Icerik({ fatura }: { fatura: EBelgeDetay }) {
   const personel = usePersonelList()
-  const yanit = useFaturaYanit()
   const arsiveKaydet = useArsiveKaydet()
-  const [kabulOnay, setKabulOnay] = useState(false)
-  const [redAcik, setRedAcik] = useState(false)
   const [onizle, setOnizle] = useState<OnizlenecekDosya | null>(null)
 
   const yanitlayan = personel.data?.find((p) => p.id === fatura.yanitlayanId)
@@ -264,33 +140,9 @@ function Icerik({ fatura }: { fatura: EBelgeDetay }) {
               )}
               . Süre içinde yanıt verilmezse fatura kabul edilmiş sayılır.
             </span>
-            <span className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                onClick={() => setKabulOnay(true)}
-                disabled={yanit.isPending}
-              >
-                <HugeiconsIcon
-                  icon={Tick02Icon}
-                  strokeWidth={2}
-                  data-icon="inline-start"
-                />
-                Kabul et
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-destructive"
-                onClick={() => setRedAcik(true)}
-                disabled={yanit.isPending}
-              >
-                <HugeiconsIcon
-                  icon={Cancel01Icon}
-                  strokeWidth={2}
-                  data-icon="inline-start"
-                />
-                Reddet
-              </Button>
+            <span>
+              Kabul veya red yanıtını Luca'da verin; yanıt bir sonraki senkronda
+              buraya yansır.
             </span>
           </AlertDescription>
         </Alert>
@@ -410,27 +262,6 @@ function Icerik({ fatura }: { fatura: EBelgeDetay }) {
         </dl>
       </section>
 
-      <ConfirmDialog
-        open={kabulOnay}
-        onOpenChange={setKabulOnay}
-        title="Fatura kabul edilsin mi?"
-        description={`${fatura.belgeNo} · ${fatura.karsiTaraf.unvan} — ${formatTutar(fatura.toplam, fatura.paraBirimi)}. Kabul yanıtı GİB üzerinden satıcıya iletilir ve geri alınamaz.`}
-        confirmLabel="Kabul et"
-        pending={yanit.isPending}
-        onConfirm={() =>
-          yanit.mutate(
-            { id: fatura.id, karar: "KABUL" },
-            {
-              onSuccess: () => {
-                toast.success("Fatura kabul edildi")
-                setKabulOnay(false)
-              },
-              onError: (error) => toast.error(error.message),
-            }
-          )
-        }
-      />
-      <RedDialog fatura={fatura} open={redAcik} onOpenChange={setRedAcik} />
       <OnizlemeDialog dosya={onizle} onClose={() => setOnizle(null)} />
     </div>
   )

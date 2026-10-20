@@ -7,14 +7,17 @@ import {
 
 import { aktiviteKeys } from "@/features/aktivite/queries"
 import { arsivKeys } from "@/features/arsiv/queries"
-import { eBelgeApi } from "@/features/e-belge/api"
+import { mukellefKeys } from "@/features/mukellef/queries"
+import { eBelgeApi, lucaApi } from "@/features/e-belge/api"
+import { ApiError } from "@/lib/http"
 import { takvimKeys } from "@/features/takvim/queries"
 import type {
   BaglantiKaydetRequest,
   BeratListParams,
   EBelgeListParams,
-  EFaturaYanitRequest,
   KontorAlimRequest,
+  LucaFirmaAktarimRequest,
+  LucaHesapRequest,
   SenkronRequest,
 } from "@prime/shared/types/api"
 
@@ -33,6 +36,9 @@ export const eBelgeKeys = {
     [...eBelgeKeys.all, "ozet", params] as const,
   kontor: (params: { donem?: string }) =>
     [...eBelgeKeys.all, "kontor", params] as const,
+  lucaHesap: ["e-belge", "luca-hesap"] as const,
+  lucaFirmalar: ["e-belge", "luca-hesap", "firmalar"] as const,
+  lucaDogrulama: ["e-belge", "luca-hesap", "dogrulama"] as const,
 }
 
 export function useBaglantilar() {
@@ -135,15 +141,6 @@ export function useBaglantiKaldir() {
   })
 }
 
-export function useFaturaYanit() {
-  const invalidate = useInvalidate()
-  return useMutation({
-    mutationFn: ({ id, ...body }: EFaturaYanitRequest & { id: string }) =>
-      eBelgeApi.yanit(id, body),
-    onSuccess: invalidate,
-  })
-}
-
 export function useArsiveKaydet() {
   const invalidate = useInvalidate({ arsiv: true })
   return useMutation({
@@ -157,5 +154,91 @@ export function useKontorAlimEkle() {
   return useMutation({
     mutationFn: (body: KontorAlimRequest) => eBelgeApi.kontorAlimEkle(body),
     onSuccess: invalidate,
+  })
+}
+
+// --- Luca portal hesabı -------------------------------------------------------------
+
+/** 409 / 422 gövdesinde `dogrulama: true`: personelin doğrulama kodu girmesi bekleniyor */
+export const lucaDogrulamaBekliyor = (error: unknown) =>
+  error instanceof ApiError &&
+  Boolean((error.body as { dogrulama?: boolean } | undefined)?.dogrulama)
+
+export function useLucaHesap(enabled = true) {
+  return useQuery({
+    queryKey: eBelgeKeys.lucaHesap,
+    queryFn: async () => {
+      try {
+        return await lucaApi.hesap()
+      } catch (error) {
+        // Tanımlı hesap yok → null (sayfa kurulum formunu gösterir)
+        if (error instanceof ApiError && error.status === 404) return null
+        throw error
+      }
+    },
+    enabled,
+  })
+}
+
+export function useLucaFirmalar(enabled = true) {
+  return useQuery({
+    queryKey: eBelgeKeys.lucaFirmalar,
+    queryFn: lucaApi.firmalar,
+    enabled,
+    retry: false,
+  })
+}
+
+export function useLucaDogrulama(enabled: boolean) {
+  return useQuery({
+    queryKey: eBelgeKeys.lucaDogrulama,
+    queryFn: lucaApi.dogrulama,
+    enabled,
+    retry: false,
+    gcTime: 0,
+  })
+}
+
+export function useLucaHesapKaydet() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (body: LucaHesapRequest) => lucaApi.kaydet(body),
+    // Doğrulama / hata durumunda da kayıt yazılır
+    onSettled: invalidate,
+  })
+}
+
+/** Firmalardan mükellef: mükellef listesi, bağlantılar ve aktivite birlikte tazelenir */
+export function useLucaFirmaAktar() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: LucaFirmaAktarimRequest) => lucaApi.firmaAktar(body),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: eBelgeKeys.all }),
+        queryClient.invalidateQueries({ queryKey: mukellefKeys.all }),
+        queryClient.invalidateQueries({ queryKey: aktiviteKeys.all }),
+      ]),
+  })
+}
+
+export function useLucaHesapKaldir() {
+  const invalidate = useInvalidate()
+  return useMutation({ mutationFn: lucaApi.kaldir, onSuccess: invalidate })
+}
+
+export function useLucaDogrula() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (kod: string) => lucaApi.dogrula(kod),
+    onSettled: invalidate,
+  })
+}
+
+export function useLucaDogrulamaYenile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: lucaApi.dogrulamaYenile,
+    onSuccess: (d) => queryClient.setQueryData(eBelgeKeys.lucaDogrulama, d),
   })
 }

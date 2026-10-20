@@ -34,7 +34,7 @@ export function mockDogrulamaKodu(oturumId: string): string {
   return String(10000 + (karma(oturumId) % 90000))
 }
 
-function dogrulamaGorseli(kod: string): string {
+export function dogrulamaGorseli(kod: string): string {
   const harfler = kod
     .split("")
     .map(

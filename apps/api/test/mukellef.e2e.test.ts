@@ -7,7 +7,6 @@ import { formValuesToInput, mukellefToFormValues } from "@prime/shared/mukellef/
 import type {
   MukellefInput,
   MukellefListResponse,
-  TopluAktarimSonucu,
 } from "@prime/shared/types/api"
 import type { Mukellef } from "@prime/shared/types/domain"
 
@@ -224,27 +223,6 @@ describe("mükellef", () => {
         (await mehmet.post("/mukellefler/toplu-atama", { ids: ["m_ltd"], sorumluPersonelId: "x" }))
           .statusCode
       ).toBe(400)
-    })
-
-    it("toplu içe aktarım: oluşturur, kayıtlıyı atlar, geçersizi satırıyla raporlar", async () => {
-      const r = await mehmet.post("/mukellefler/toplu", {
-        kayitlar: [
-          { satir: 2, mukellef: yeniSahis() },
-          { satir: 3, mukellef: { ...yeniSahis(), unvan: "Tekrar", tckn: "10000000146" } },
-          { satir: 4, mukellef: { ...girdi(LTD), unvan: "Bozuk", vkn: "123" } },
-        ],
-      })
-      expect(r.statusCode).toBe(200)
-      expect(r.json<TopluAktarimSonucu>()).toEqual({
-        olusturulan: 1,
-        guncellenen: 0,
-        atlanan: 1,
-        hatalar: [{ satir: 4, mesaj: "Geçerli bir VKN giriniz" }],
-      })
-      const [log] = await aktiviteler("MUKELLEF_OLUSTURULDU")
-      expect(log?.aciklama).toBe("Yeni Şahıs (içe aktarım)")
-      expect(await t.db.select().from(bildirim)).toEqual([])
-      expect((await mehmet.post("/mukellefler/toplu", { kayitlar: [] })).statusCode).toBe(400)
     })
 
     it("mükellef sorumlusu olan personel silinemez (409)", async () => {

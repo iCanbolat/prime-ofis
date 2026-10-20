@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 
 import { girisYap } from "./helpers"
 
-test("senkronize et → ticari faturayı reddet → faturayı arşive kaydet", async ({
+test("senkronize et → yanıt bekleyen faturayı aç → faturayı arşive kaydet", async ({
   page,
 }) => {
   await girisYap(page)
@@ -15,7 +15,7 @@ test("senkronize et → ticari faturayı reddet → faturayı arşive kaydet", a
     page.getByText(/^Senkronize edildi: \d+ yeni fatura/)
   ).toBeVisible()
 
-  // Yanıt bekleyen ilk ticari faturayı gerekçeyle reddet
+  // Yanıt bekleyen ilk ticari fatura: yanıt Luca'da verilir
   await page.getByRole("button", { name: "Gelen" }).click()
   // Yanıt filtresi "Filtreler" panelinde; seçim "Uygula" ile URL'e yazılır
   await page.getByRole("button", { name: "Filtreler" }).click()
@@ -32,11 +32,9 @@ test("senkronize et → ticari faturayı reddet → faturayı arşive kaydet", a
 
   const panel = page.getByRole("dialog", { name: belgeNo })
   await expect(panel.getByText("Ticari fatura yanıtı bekleniyor")).toBeVisible()
-  await panel.getByRole("button", { name: "Reddet" }).click()
-  const red = page.getByRole("dialog", { name: "Faturayı reddet" })
-  await red.getByRole("button", { name: "Fiyat veya miktar hatalı" }).click()
-  await red.getByRole("button", { name: "Reddet" }).click()
-  await expect(panel.getByText("Reddedildi", { exact: true })).toBeVisible()
+  await expect(
+    panel.getByText(/Kabul veya red yanıtını Luca'da verin/)
+  ).toBeVisible()
 
   // Arşive kaydet → mükellefin arşivinde Fatura kategorisinde görünür
   await panel.getByRole("button", { name: "Arşive kaydet" }).click()

@@ -27,7 +27,7 @@ import { BaglantiDurumBadge } from "@/features/e-belge/components/ebelge-rozetle
 import { FaturaListesi } from "@/features/e-belge/components/fatura-listesi"
 import { SenkronButonu } from "@/features/e-belge/components/senkron-butonu"
 import { useBaglanti } from "@/features/e-belge/queries"
-import { EBELGE_TUR_ETIKET, ORTAM_ETIKET } from "@prime/shared/e-belge/sabitler"
+import { EBELGE_TUR_ETIKET } from "@prime/shared/e-belge/sabitler"
 import { useMukellefKart } from "@/features/mukellef/pages/mukellef-kart-context"
 import { formatDateTime } from "@prime/shared/lib/format"
 import type { EBelgeTur } from "@prime/shared/types/domain"
@@ -97,8 +97,9 @@ export function MukellefEBelgeTab() {
             <BaglantiDurumBadge durum={b.durum} />
           </CardTitle>
           <CardDescription>
-            {ORTAM_ETIKET[b.ortam]} ortam
-            {b.anahtarIpucu && ` · anahtar ••••${b.anahtarIpucu}`}
+            {b.lucaFirmaId
+              ? "Luca firmasına eşli"
+              : "Luca firmasıyla eşlenmemiş"}
             {b.sonSenkron && ` · son senkron ${formatDateTime(b.sonSenkron)}`}
           </CardDescription>
           <CardAction className="flex flex-wrap gap-2">

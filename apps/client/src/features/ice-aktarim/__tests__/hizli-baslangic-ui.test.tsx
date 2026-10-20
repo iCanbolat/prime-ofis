@@ -2,7 +2,6 @@ import { act, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { decryptJson } from "@/lib/crypto"
-import { generateVkn } from "@prime/shared/lib/tax-id"
 import { db } from "@/mocks/db"
 import { useVaultStore } from "@/features/kasa/store"
 import { demoKasaAnahtari } from "@/test/kasa"
@@ -17,7 +16,6 @@ vi.mock("@/features/ice-aktarim/dosya-oku", () => ({
   tabloSatirlari,
 }))
 
-const YENI_VKN = generateVkn(() => 0.37)
 const excel = (ad = "liste.xlsx") => new File(["x"], ad)
 
 async function dosyaYukle(user: ReturnType<typeof renderRoute>["user"]) {
@@ -33,32 +31,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
-})
-
-describe("Hızlı başlangıç — mükellefler", () => {
-  it("önizleme durumları gösterir, yalnızca aktarılacak satırlar eklenir", async () => {
-    tabloSatirlari.mockResolvedValue([
-      ["Unvan", "VKN/TCKN", "Vergi dairesi"],
-      ["Yeni Ltd", YENI_VKN, "Kadıköy"],
-      ["Çınar", "0174520662", "Kadıköy"],
-      ["Eksik", "", ""],
-    ])
-    const { user } = renderRoute("/mukellefler", { as: TEST_USERS.yonetici })
-    await user.click(
-      await screen.findByRole("link", { name: /Excel'den içe aktar/ })
-    )
-    const tablo = await dosyaYukle(user)
-    expect(
-      screen.getByText("1 aktarılacak · 1 atlanacak · 1 hatalı")
-    ).toBeInTheDocument()
-    expect(within(tablo).getByText(/Zaten kayıtlı/)).toBeInTheDocument()
-
-    await user.click(screen.getByRole("button", { name: "1 kaydı aktar" }))
-    expect(await screen.findByText("Aktarım tamamlandı")).toBeInTheDocument()
-    expect(db.mukellef.where((m) => m.vkn === YENI_VKN)).toMatchObject([
-      { unvan: "Yeni Ltd", sorumluPersonelId: "p_1" },
-    ])
-  })
 })
 
 describe("Hızlı başlangıç — şifreler", () => {

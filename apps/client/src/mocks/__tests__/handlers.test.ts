@@ -155,6 +155,7 @@ describe("dev", () => {
       borcuYoktur: 0,
       kamuDogrulama: 0,
       kamuTarama: 0,
+      lucaHesap: 1,
     })
     await http.post("/dev/reset")
     const seed = await http.get<Record<string, number>>("/dev/stats")

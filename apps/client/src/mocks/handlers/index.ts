@@ -8,6 +8,7 @@ import { buroHandlers } from "@/mocks/handlers/buro"
 import { simulationHandler } from "@/mocks/handlers/common"
 import { devHandlers } from "@/mocks/handlers/dev"
 import { eBelgeHandlers } from "@/mocks/handlers/e-belge"
+import { lucaHesapHandlers } from "@/mocks/handlers/luca-hesap"
 import { evrakTalebiHandlers } from "@/mocks/handlers/evrak-talebi"
 import { fisAktarimiHandlers } from "@/mocks/handlers/fis-aktarimi"
 import { gorevHandlers } from "@/mocks/handlers/gorev"
@@ -37,6 +38,7 @@ export const handlers = [
   ...portalHandlers,
   ...gorevHandlers,
   ...eBelgeHandlers,
+  ...lucaHesapHandlers,
   ...iceAktarimHandlers,
   ...fisAktarimiHandlers,
   ...tahsilatHandlers,

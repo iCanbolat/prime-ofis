@@ -2,17 +2,16 @@
  * `/api/e-belge/*` — backend'in e-Belge sözleşmesi. Luca'ya erişim `EntegratorAdapter` üzerinden
  * (burada mock uygulaması) yapılır; gerçek backend aynı uçları kendi adaptörüyle karşılar.
  */
-import { format, subMonths } from "date-fns"
+import { format, subDays, subMonths } from "date-fns"
 import { HttpResponse, http } from "msw"
 
 import {
   beratTakvimId,
   yanitDurumu,
   yanitKalanGun,
-  yanitlanabilirMi,
   YANIT_UYARI_GUN,
 } from "@prime/shared/e-belge/kurallar"
-import type { EntegratorKimlik } from "@prime/shared/e-belge/entegrator-adapter"
+import type { LucaPortalFirma } from "@prime/shared/e-belge/luca-portal"
 import {
   baglantiHatasi,
   EBELGE_DONEM_RE,
@@ -20,7 +19,6 @@ import {
   EBELGE_YONLERI,
   faturaFiltreHatasi,
   kontorAlimHatasi,
-  yanitHatasi,
 } from "@prime/shared/e-belge/girdi"
 import {
   kontorBakiyesi,
@@ -30,7 +28,7 @@ import {
 } from "@prime/shared/e-belge/kontor"
 import { SAYFA_BOYUTU } from "@prime/shared/e-belge/sabitler"
 import { yukumlulukleriHesapla } from "@prime/shared/takvim/motor"
-import { bugun } from "@prime/shared/lib/tarih"
+import { bugun, toYmd } from "@prime/shared/lib/tarih"
 import { putBlob } from "@/mocks/blob-store"
 import { db } from "@/mocks/db"
 import { donemListesi } from "@prime/mock-data/factories/e-belge"
@@ -44,7 +42,15 @@ import {
   turkishIncludes,
 } from "@/mocks/handlers/common"
 import { beyanDurumuOku, beyanDurumuYaz } from "@/mocks/handlers/takvim"
-import { mockEntegratorAdapter as adapter } from "@/mocks/entegrator/mock-adapter"
+import {
+  lucaCalistir,
+  lucaHesabi,
+  lucaKontorYaz,
+  lucaPortal,
+  LucaYaniti,
+  yanitla,
+} from "@/mocks/handlers/luca-hesap"
+import { ublKalemleri } from "@prime/shared/e-belge/ubl-kalemler"
 import type {
   BaglantiKaydetRequest,
   BeratListResponse,
@@ -53,7 +59,6 @@ import type {
   EBelgeListResponse,
   EBelgeOzetResponse,
   EBelgeView,
-  EFaturaYanitRequest,
   EntegratorBaglantiView,
   KontorAlimRequest,
   KontorAlimView,
@@ -82,7 +87,6 @@ function baglantiView(m: Mukellef): EntegratorBaglantiView {
     id: `n_${m.id}`,
     mukellefId: m.id,
     durum: "BAGLI_DEGIL",
-    ortam: "CANLI",
     eFatura: false,
     eArsiv: false,
     eDefter: false,
@@ -106,12 +110,29 @@ export function ebelgeView(e: EBelge, simdi = new Date()): EBelgeView {
   }
 }
 
-/** Backend anahtarı KMS'ten çözer; mock'ta anahtar hiç saklanmadığı için yer tutucu kullanılır. */
-const kimlik = (b: EntegratorBaglanti): EntegratorKimlik => ({
-  mukellefId: b.mukellefId,
-  apiAnahtari: "<backend>",
-  ortam: b.ortam,
-})
+/** Backend `LucaPortalEntegrator`: mükellefin eşli Luca firması üzerinden portal çağrıları */
+const firmasi = (b: EntegratorBaglanti) => {
+  if (!b.lucaFirmaId)
+    throw new LucaYaniti(
+      errorResponse(409, "Mükellef bir Luca firmasıyla eşlenmemiş")
+    )
+  return b.lucaFirmaId
+}
+
+const portalFaturaIcerik = (
+  b: EntegratorBaglanti,
+  ettn: string,
+  format: "PDF" | "XML"
+) => lucaCalistir((o) => lucaPortal.faturaIcerik(o, firmasi(b), ettn, format))
+
+/** Son senkrondan 7 gün geriye (ilk senkronda 90 gün) → bugün */
+function senkronAraligi(sonSenkron: string | undefined) {
+  const bugunTarih = new Date()
+  const baslangic = sonSenkron
+    ? subDays(new Date(sonSenkron), 7)
+    : subDays(bugunTarih, 90)
+  return { baslangic: toYmd(baslangic), bitis: toYmd(bugunTarih) }
+}
 
 /** Berat matrisi dönemleri: içinde bulunulan aydan önceki 12 ay */
 export function beratDonemleri(bugunYmd = bugun()): string[] {
@@ -190,11 +211,13 @@ async function mukellefiSenkronizeEt(
   const turler = TURLER.filter((t) => (t === "E_FATURA" ? b.eFatura : b.eArsiv))
   for (const tur of turler) {
     for (const yon of YONLER) {
-      const gelenler = await adapter.faturalariGetir(kimlik(b), {
-        tur,
-        yon,
-        sonra: b.sonSenkron,
-      })
+      const gelenler = await lucaCalistir((o) =>
+        lucaPortal.faturalar(o, firmasi(b), {
+          tur,
+          yon,
+          ...senkronAraligi(b.sonSenkron),
+        })
+      )
       for (const f of gelenler) {
         const mevcut = db.ebelge.where((e) => e.ettn === f.ettn)[0]
         if (mevcut) {
@@ -211,7 +234,10 @@ async function mukellefiSenkronizeEt(
   if (b.eDefter) {
     const yillar = new Set(beratDonemleri().map((d) => d.slice(0, 4)))
     for (const yil of yillar) {
-      for (const berat of await adapter.beratDurumlari(kimlik(b), yil)) {
+      const beratlar = await lucaCalistir((o) =>
+        lucaPortal.beratlar(o, firmasi(b), yil)
+      )
+      for (const berat of beratlar) {
         const id = `${b.mukellefId}:${berat.donem}`
         const onceki = db.berat.find(id)
         if (onceki?.durum === berat.durum) continue
@@ -267,29 +293,35 @@ export const eBelgeHandlers = [
       const body = await request.json()
       const hata = baglantiHatasi(body)
       if (hata) return errorResponse(400, hata)
-      const anahtar = body.apiAnahtari.trim()
-
-      const dogrulama = await adapter.baglantiDogrula({
-        mukellefId: m.id,
-        apiAnahtari: anahtar,
-        ortam: body.ortam,
-      })
-      if (!dogrulama.gecerli)
+      const lucaFirmaId = body.lucaFirmaId.trim()
+      const baskasi = db.baglanti.where(
+        (b) => b.lucaFirmaId === lucaFirmaId && b.mukellefId !== m.id
+      )[0]
+      if (baskasi)
         return errorResponse(
-          422,
-          dogrulama.hataMesaji ?? "Luca bağlantısı doğrulanamadı"
+          409,
+          "Bu Luca firması başka bir mükellefe eşlenmiş"
         )
+      let dogrulama: LucaPortalFirma | undefined
+      try {
+        dogrulama = (await lucaCalistir((o) => lucaPortal.firmalar(o))).find(
+          (f) => f.firmaId === lucaFirmaId
+        )
+      } catch (e) {
+        if (e instanceof LucaYaniti) return e.yanit
+        throw e
+      }
+      if (!dogrulama)
+        return errorResponse(422, "Firma Luca hesabında bulunamadı")
 
-      // Anahtarın kendisi saklanmaz (gerçek backend: KMS ile şifreli); yalnızca ipucu
       const kayit: Omit<EntegratorBaglanti, "id"> = {
         mukellefId: m.id,
         durum: "BAGLI",
-        ortam: body.ortam,
         eFatura: dogrulama.eFatura,
         eArsiv: dogrulama.eArsiv,
         eDefter: dogrulama.eDefter,
         postaKutusu: dogrulama.postaKutusu,
-        anahtarIpucu: anahtar.slice(-4),
+        lucaFirmaId,
         hataMesaji: undefined,
         baglayanId: actor.id,
         baglanmaTarihi: new Date().toISOString(),
@@ -308,7 +340,7 @@ export const eBelgeHandlers = [
         hedefTip: "MUKELLEF",
         hedefId: m.id,
         mukellefId: m.id,
-        aciklama: `Luca (${body.ortam === "TEST" ? "test" : "canlı"})`,
+        aciklama: `Luca firması ${lucaFirmaId}`,
       })
       return HttpResponse.json(baglantiView(m))
     }
@@ -365,8 +397,26 @@ export const eBelgeHandlers = [
         hatali: [],
         sonSenkron: new Date().toISOString(),
       }
+      if (hedefler.length) {
+        // Portal oturumu bir kez açılır (düşmüşse yeniden giriş); doğrulama istenirse senkron durur
+        // (409 dogrulama)
+        try {
+          await lucaCalistir((o) => lucaPortal.firmalar(o))
+        } catch (e) {
+          if (e instanceof LucaYaniti) return e.yanit
+          throw e
+        }
+      }
       for (const b of hedefler) {
         const unvan = db.mukellef.find(b.mukellefId)!.unvan
+        if (!b.lucaFirmaId) {
+          yanit.hatali.push({
+            mukellefId: b.mukellefId,
+            unvan,
+            mesaj: "Mükellef bir Luca firmasıyla eşlenmemiş",
+          })
+          continue
+        }
         if (b.durum === "HATA") {
           yanit.hatali.push({
             mukellefId: b.mukellefId,
@@ -375,12 +425,24 @@ export const eBelgeHandlers = [
           })
           continue
         }
-        const s = await mukellefiSenkronizeEt(b, actor)
+        let s: SenkronSonucu
+        try {
+          s = await mukellefiSenkronizeEt(b, actor)
+        } catch (e) {
+          // Doğrulama kodu bekleniyor: senkron durur (backend ile aynı)
+          if (e instanceof LucaYaniti) return e.yanit
+          throw e
+        }
         yanit.mukellefSayisi++
         yanit.yeniFatura += s.yeniFatura
         yanit.guncellenenFatura += s.guncellenenFatura
         yanit.onaylananBerat += s.onaylananBerat
       }
+
+      if (yanit.mukellefSayisi > 0)
+        lucaKontorYaz(
+          (await lucaCalistir((o) => lucaPortal.kontorBakiyesi(o))).kalan
+        )
 
       logActivity({
         aktorId: actor.id,
@@ -475,12 +537,17 @@ export const eBelgeHandlers = [
       if (!e) return notFound("Fatura bulunamadı")
       const b = db.baglanti.where((n) => n.mukellefId === e.mukellefId)[0]
       const m = db.mukellef.find(e.mukellefId)
-      const detay: EBelgeDetay = {
-        ...ebelgeView(e),
-        mukellefVknTckn: m?.vkn ?? m?.tckn ?? "",
-        kalemler: b ? await adapter.faturaKalemleri(kimlik(b), e.ettn) : [],
-      }
-      return HttpResponse.json(detay)
+      return yanitla(async () => {
+        // Kalemler faturanın Luca'daki UBL XML'inden
+        const detay: EBelgeDetay = {
+          ...ebelgeView(e),
+          mukellefVknTckn: m?.vkn ?? m?.tckn ?? "",
+          kalemler: b?.lucaFirmaId
+            ? ublKalemleri(await portalFaturaIcerik(b, e.ettn, "XML"))
+            : [],
+        }
+        return HttpResponse.json(detay)
+      })
     }
   ),
 
@@ -499,59 +566,12 @@ export const eBelgeHandlers = [
         mukellefId: e.mukellefId,
         ad: `${e.belgeNo}.pdf`,
       })
-      return HttpResponse.json({
-        dataUrl: await adapter.faturaIcerik(kimlik(b), e.ettn, "PDF"),
-        ad: `${e.belgeNo}.pdf`,
-      })
-    }
-  ),
-
-  http.post<{ id: string }, EFaturaYanitRequest>(
-    api("/e-belge/faturalar/:id/yanit"),
-    async ({ request, params }) => {
-      const actor = requireActor(request)
-      if (actor instanceof Response) return actor
-      const e = db.ebelge.find(params.id)
-      if (!e) return notFound("Fatura bulunamadı")
-      if (e.yon !== "GELEN" || e.senaryo !== "TICARI")
-        return errorResponse(
-          400,
-          "Yalnızca gelen ticari faturalar yanıtlanabilir"
-        )
-      if (!yanitlanabilirMi(e))
-        return errorResponse(
-          409,
-          yanitDurumu(e) === "SURESI_DOLDU"
-            ? "8 günlük yanıt süresi dolmuş"
-            : "Bu fatura zaten yanıtlanmış"
-        )
-      const body = await request.json()
-      const yanitHata = yanitHatasi(body)
-      if (yanitHata) return errorResponse(400, yanitHata)
-      const neden = body.neden?.trim()
-      const b = db.baglanti.where((n) => n.mukellefId === e.mukellefId)[0]
-      if (b?.durum !== "BAGLI")
-        return errorResponse(409, "Mükellefin Luca bağlantısı aktif değil")
-
-      await adapter.ticariYanitGonder(kimlik(b), e.ettn, body.karar, neden)
-      const guncel = db.ebelge.update(e.id, {
-        yanit: body.karar,
-        redNedeni: body.karar === "RED" ? neden : undefined,
-        yanitlayanId: actor.id,
-        yanitTarihi: new Date().toISOString(),
-      })!
-      logActivity({
-        aktorId: actor.id,
-        eylem:
-          body.karar === "KABUL"
-            ? "EFATURA_KABUL_EDILDI"
-            : "EFATURA_REDDEDILDI",
-        hedefTip: "EBELGE",
-        hedefId: e.id,
-        mukellefId: e.mukellefId,
-        aciklama: `${e.belgeNo} · ${e.karsiTaraf.unvan}${neden ? ` — ${neden}` : ""}`,
-      })
-      return HttpResponse.json(ebelgeView(guncel))
+      return yanitla(async () =>
+        HttpResponse.json({
+          dataUrl: await portalFaturaIcerik(b, e.ettn, "PDF"),
+          ad: `${e.belgeNo}.pdf`,
+        })
+      )
     }
   ),
 
@@ -571,7 +591,13 @@ export const eBelgeHandlers = [
       const b = db.baglanti.where((n) => n.mukellefId === e.mukellefId)[0]
       if (!b) return errorResponse(409, "Mükellefin Luca bağlantısı yok")
 
-      const icerik = await adapter.faturaIcerik(kimlik(b), e.ettn, "PDF")
+      let icerik: string
+      try {
+        icerik = await portalFaturaIcerik(b, e.ettn, "PDF")
+      } catch (err) {
+        if (err instanceof LucaYaniti) return err.yanit
+        throw err
+      }
       // "… A.Ş." ile biten unvanlarda çift nokta oluşmasın
       const ad = `${e.belgeNo} - ${e.karsiTaraf.unvan.replace(/\.+$/, "")}.pdf`
       const dosya = db.arsiv.insert({
@@ -659,9 +685,13 @@ export const eBelgeHandlers = [
         : bugunYmd.slice(0, 7)
     const belgeler = db.ebelge.all()
     const bakiye = kontorBakiyesi(db.kontor.all(), belgeler, bugunYmd)
+    const luca = lucaHesabi()
     const yanit: KontorOzetResponse = {
       donem,
       ...bakiye,
+      ...(luca?.kontorBakiye != null && luca.kontorTarihi
+        ? { lucaBakiye: luca.kontorBakiye, lucaBakiyeTarihi: luca.kontorTarihi }
+        : {}),
       aylik: sonDonemler(bugunYmd, 6).map((d) => ({
         donem: d,
         tuketim: donemTuketimi(belgeler, d),

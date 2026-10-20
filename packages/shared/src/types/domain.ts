@@ -150,6 +150,9 @@ export type AktiviteEylem =
   | "DONEM_GOREVLERI_OLUSTURULDU"
   | "ENTEGRATOR_BAGLANDI"
   | "ENTEGRATOR_BAGLANTI_KALDIRILDI"
+  | "LUCA_HESABI_GUNCELLENDI"
+  | "LUCA_HESABI_KALDIRILDI"
+  | "LUCA_FIRMALARI_AKTARILDI"
   | "EBELGE_SENKRONIZE_EDILDI"
   | "EFATURA_KABUL_EDILDI"
   | "EFATURA_REDDEDILDI"
@@ -489,29 +492,51 @@ export interface Gorev {
 // --- e-Belge (Luca) ------------------------------------------------------
 
 /**
- * Mükellefin Luca hesabıyla bağlantısı (mükellef başına bir kayıt). Web servis anahtarı yalnızca
- * backend'de şifreli saklanır; istemci ve mock DB yalnızca son 4 haneyi (`anahtarIpucu`) görür.
+ * Mükellefin Luca bağlantısı (mükellef başına bir kayıt): büronun Luca hesabındaki bir firmaya
+ * eşlemedir (`lucaFirmaId`). Erişim büronun tek Luca kullanıcısıyla yapılır (`LucaHesapKaydi`).
  */
 export type EntegratorBaglantiDurumu = "BAGLI" | "HATA" | "BAGLI_DEGIL"
-export type EntegratorOrtam = "TEST" | "CANLI"
 
 export interface EntegratorBaglanti {
   id: string
   mukellefId: string
   durum: EntegratorBaglantiDurumu
-  ortam: EntegratorOrtam
   /** Luca'da açık servisler (GİB kayıtlı kullanıcı durumu) */
   eFatura: boolean
   eArsiv: boolean
   eDefter: boolean
   /** e-Fatura gelen posta kutusu etiketi, ör. "urn:mail:defaultpk@cinar.com.tr" */
   postaKutusu?: string
-  /** Web servis anahtarının son 4 karakteri */
-  anahtarIpucu?: string
+  /** Eşlenen Luca firması (büro Luca hesabında) */
+  lucaFirmaId?: string
   sonSenkron?: ISODateString
   hataMesaji?: string
   baglayanId?: string
   baglanmaTarihi?: ISODateString
+}
+
+export type LucaHesapDurumu = "BAGLI" | "HATA" | "DOGRULAMA"
+
+/**
+ * Büronun Luca portal kullanıcısı (tek kayıt, id `buro`). Backend şifreyi SecretBox ile şifreli
+ * saklar; mock DB taklit için düz tutar. Bekleyen doğrulama ekranının portal oturum kimliği hiçbir
+ * yanıtta dönmez.
+ */
+export interface LucaHesapKaydi {
+  id: string
+  kullanici: string
+  sifre: string
+  sifreIpucu: string
+  durum: LucaHesapDurumu
+  hataMesaji?: string
+  sonGiris?: ISODateString
+  kontorBakiye?: number
+  kontorTarihi?: ISODateString
+  dogrulamaOturumId?: string
+  dogrulamaGorsel?: string
+  dogrulamaSonGecerlilik?: ISODateString
+  guncelleyenId: string
+  guncellemeTarihi: ISODateString
 }
 
 export type EBelgeTur = "E_FATURA" | "E_ARSIV"

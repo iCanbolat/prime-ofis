@@ -27,7 +27,7 @@ export const SEED_BERAT_DONEMLERI = { ilk: "2025-09", son: "2026-08" }
 
 const KARSI_TARAF_EKLERI = ["Ltd. Şti.", "A.Ş.", "Tic. Ltd. Şti.", "San. A.Ş."]
 const HATALI_BAGLANTI =
-  "Luca web servis anahtarı geçersiz veya süresi dolmuş (401)"
+  "Firma Luca hesabında bulunamadı; Luca'da firma yetkisini kontrol edin"
 
 /** Unvandan 3 harflik fatura seri öneki: "Çınar Yazılım" → "CNR" */
 export function seriOneki(unvan: string): string {
@@ -126,16 +126,17 @@ function baglantilar(faker: Faker, mukellefler: Mukellef[]) {
     if (hatali) hataliSayisi++
     const alan = m.eposta.split("@")[1] ?? "firma.com.tr"
     const eFatura = sirket || faker.number.float() < 0.5
+    // Eski anahtar ipucu üretimi: seed sırası (sonraki faturalar) değişmesin diye tüketilir
+    faker.string.alphanumeric({ length: 4, casing: "lower" })
     kayitlar.push({
       id: `n_${m.id}`,
       mukellefId: m.id,
       durum: hatali ? "HATA" : "BAGLI",
-      ortam: "CANLI",
       eFatura,
       eArsiv: true,
       eDefter: m.eDefterMukellefi,
       postaKutusu: eFatura ? `urn:mail:defaultpk@${alan}` : undefined,
-      anahtarIpucu: faker.string.alphanumeric({ length: 4, casing: "lower" }),
+      lucaFirmaId: `L-${m.id}`,
       sonSenkron: hatali
         ? "2026-08-14T06:00:00.000Z"
         : "2026-09-22T06:00:00.000Z",

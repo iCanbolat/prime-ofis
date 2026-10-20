@@ -8,17 +8,18 @@ import type {
   EBelgeYon,
   EFaturaYanitKayit,
   EntegratorBaglantiDurumu,
-  EntegratorOrtam,
   GibDurumu,
+  LucaHesapDurumu,
 } from "@prime/shared/types/domain"
+
 
 import { arsivDosya } from "./arsiv.js"
 import { mukellef } from "./mukellef.js"
 import { para, zaman } from "./ortak.js"
 
 /**
- * Mükellefin Luca hesabıyla bağlantısı (mükellef başına bir satır, id `n_${mukellefId}`).
- * Web servis anahtarı `anahtar`'da SecretBox ile şifreli; yanıtlarda yalnızca `anahtar_ipucu`.
+ * Mükellefin Luca bağlantısı (mükellef başına bir satır, id `n_${mukellefId}`): büro Luca
+ * hesabındaki firmaya eşleme. Bir firma tek mükellefe eşlenir.
  */
 export const entegratorBaglanti = pgTable("entegrator_baglanti", {
   id: text().primaryKey(),
@@ -27,13 +28,12 @@ export const entegratorBaglanti = pgTable("entegrator_baglanti", {
     .unique()
     .references(() => mukellef.id, { onDelete: "cascade" }),
   durum: text().$type<EntegratorBaglantiDurumu>().notNull(),
-  ortam: text().$type<EntegratorOrtam>().notNull(),
   eFatura: boolean().notNull(),
   eArsiv: boolean().notNull(),
   eDefter: boolean().notNull(),
   postaKutusu: text(),
-  anahtar: text(),
-  anahtarIpucu: text(),
+  /** Büro Luca hesabındaki firma */
+  lucaFirmaId: text().unique(),
   sonSenkron: zaman(),
   hataMesaji: text(),
   baglayanId: text(),
@@ -102,4 +102,26 @@ export const kontorAlim = pgTable("kontor_alim", {
   tutar: para().notNull(),
   not: text(),
   ekleyenId: text().notNull(),
+})
+
+/**
+ * Büronun Luca portal kullanıcısı (tek satır, id `buro`). Şifre `sifre`'de SecretBox ile şifreli;
+ * yanıtlarda yalnızca `sifre_ipucu`. Bekleyen doğrulama ekranı da burada tutulur: portal oturum
+ * kimliği (`dogrulama_oturum_id`) hiçbir yanıtta dönmez, görsel kısa ömürlüdür ve loglanmaz.
+ */
+export const lucaHesap = pgTable("luca_hesap", {
+  id: text().primaryKey(),
+  kullanici: text().notNull(),
+  sifre: text().notNull(),
+  sifreIpucu: text().notNull(),
+  durum: text().$type<LucaHesapDurumu>().notNull(),
+  hataMesaji: text(),
+  sonGiris: zaman(),
+  kontorBakiye: integer(),
+  kontorTarihi: zaman(),
+  dogrulamaOturumId: text(),
+  dogrulamaGorsel: text(),
+  dogrulamaSonGecerlilik: zaman(),
+  guncelleyenId: text().notNull(),
+  guncellemeTarihi: zaman().notNull(),
 })

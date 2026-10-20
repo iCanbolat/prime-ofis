@@ -5,7 +5,6 @@ import type {
   MizanDetay,
   MizanIceAktarRequest,
   MizanView,
-  MukellefTopluRequest,
   TahakkukIceAktarRequest,
   TahakkukIceAktarResponse,
   TahakkukView,
@@ -24,8 +23,6 @@ export const iceAktarimApi = {
   mizan: (id: string) => http.get<MizanDetay>(`/ice-aktarim/mizanlar/${id}`),
   mizanAktar: (body: MizanIceAktarRequest) =>
     http.post<MizanView>("/ice-aktarim/mizanlar", body),
-  mukellefToplu: (body: MukellefTopluRequest) =>
-    http.post<TopluAktarimSonucu>("/mukellefler/toplu", body),
   sifreToplu: (body: CredentialTopluRequest) =>
     http.post<TopluAktarimSonucu>("/kasa/credentials/toplu", body),
   acilisToplu: (body: AcilisTopluRequest) =>

@@ -2,7 +2,6 @@ import { TransactionHost, Transactional } from "@nestjs-cls/transactional"
 import {
   BadRequestException,
   ConflictException,
-  HttpException,
   Injectable,
   NotFoundException,
   type OnModuleInit,
@@ -19,7 +18,6 @@ import {
 import type {
   MukellefDurumFiltre,
   MukellefListResponse,
-  TopluAktarimSonucu,
 } from "@prime/shared/types/api"
 import type { Mukellef, MukellefTur, Personel } from "@prime/shared/types/domain"
 
@@ -152,40 +150,25 @@ export class MukellefService implements OnModuleInit {
     return yeni
   }
 
-  /** Hızlı başlangıç: Excel'den mükellefler. Kayıtlı VKN/TCKN atlanır, geçersiz satır raporlanır. */
-  @Transactional()
-  async toplu(aktor: Personel, body: unknown): Promise<TopluAktarimSonucu> {
-    const kayitlar = (body as { kayitlar?: unknown } | null)?.kayitlar
-    if (!Array.isArray(kayitlar) || kayitlar.length === 0) {
-      throw new BadRequestException({ message: "Aktarılacak kayıt yok" })
-    }
-    const sonuc: TopluAktarimSonucu = { olusturulan: 0, guncellenen: 0, atlanan: 0, hatalar: [] }
-    for (const kayit of kayitlar as { satir?: unknown; mukellef?: unknown }[]) {
-      const satir = Number(kayit?.satir) || 0
-      let input: Girdi
-      try {
-        input = await this.dogrula(kayit?.mukellef)
-      } catch (e) {
-        if (!(e instanceof HttpException)) throw e
-        if (e.getStatus() === 409) sonuc.atlanan++
-        else sonuc.hatalar.push({ satir, mesaj: hataMesaji(e) })
-        continue
-      }
-      const yeni = await this.ekle(input)
-      await this.aktiviteler.log(
-        {
-          aktorId: aktor.id,
-          eylem: "MUKELLEF_OLUSTURULDU",
-          hedefTip: "MUKELLEF",
-          hedefId: yeni.id,
-          mukellefId: yeni.id,
-          aciklama: `${yeni.unvan} (içe aktarım)`,
-        },
-        false
-      )
-      sonuc.olusturulan++
-    }
-    return sonuc
+  /**
+   * Luca firmasından mükellef (`EBelgeService.lucaFirmalariniAktar`): aynı doğrulama, aktivite
+   * bildirimsiz. Çağıranın transaction'ında çalışır; kimlik çakışması 409 fırlatır.
+   */
+  async lucaFirmasindanOlustur(aktor: Personel, body: unknown): Promise<Mukellef> {
+    const input = await this.dogrula(body)
+    const yeni = await this.ekle(input)
+    await this.aktiviteler.log(
+      {
+        aktorId: aktor.id,
+        eylem: "MUKELLEF_OLUSTURULDU",
+        hedefTip: "MUKELLEF",
+        hedefId: yeni.id,
+        mukellefId: yeni.id,
+        aciklama: `${yeni.unvan} (Luca)`,
+      },
+      false
+    )
+    return yeni
   }
 
   @Transactional()
@@ -290,11 +273,4 @@ function nullDoldur(input: Girdi) {
     mersisNo: mersisNo ?? null,
     tercihKanal: tercihKanal ?? null,
   }
-}
-
-function hataMesaji(e: HttpException): string {
-  const yanit = e.getResponse()
-  return typeof yanit === "object" && yanit && "message" in yanit
-    ? String((yanit as { message: unknown }).message)
-    : e.message
 }

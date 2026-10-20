@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import { bakiyeleriOku } from "@prime/shared/ice-aktarim/bakiye-okuma"
-import { mukellefleriOku } from "@prime/shared/ice-aktarim/mukellef-okuma"
 import { sifreleriOku } from "@prime/shared/ice-aktarim/sifre-okuma"
 import {
   SutunHatasi,
@@ -12,8 +11,10 @@ import {
   tarihHucresi,
 } from "@prime/shared/ice-aktarim/sutun-eslestir"
 import { generateTckn, generateVkn } from "@prime/shared/lib/tax-id"
-import { FIXTURE_MUKELLEFLER, FIXTURE_UCRETLER } from "@prime/mock-data/fixtures"
-import { PERSONEL } from "@prime/mock-data/factories/personel"
+import {
+  FIXTURE_MUKELLEFLER,
+  FIXTURE_UCRETLER,
+} from "@prime/mock-data/fixtures"
 import type { Mukellef } from "@prime/shared/types/domain"
 
 const YENI_VKN = generateVkn(() => 0.37)
@@ -67,102 +68,6 @@ describe("hücre yardımcıları", () => {
     expect(donemHucresi("10/2026")).toBe("2026-10")
     expect(donemHucresi("Ekim 2026")).toBe("2026-10")
     expect(donemHucresi("2026-13")).toBeNull()
-  })
-})
-
-describe("mukellefleriOku", () => {
-  const baglam = {
-    mevcut: new Map(
-      FIXTURE_MUKELLEFLER.map((m) => [m.vkn ?? m.tckn ?? "", m.unvan])
-    ),
-    personel: PERSONEL,
-    varsayilanSorumluId: "p_1",
-  }
-  const oku = (...satirlar: unknown[][]) =>
-    mukellefleriOku(
-      [
-        [
-          "Unvanı",
-          "VKN",
-          "V.D.",
-          "Tel",
-          "Sorumlu Personel",
-          "Çalışan Sayısı",
-          "Etiketler",
-        ],
-        ...satirlar,
-      ],
-      baglam
-    )
-
-  it("geçerli satırı eksiksiz MukellefInput'a çevirir; tür kimlikten tahmin edilir", () => {
-    const [ltd, sahis] = oku(
-      [
-        "Yeni Ltd",
-        YENI_VKN,
-        "Kadıköy",
-        "0532 111 22 33",
-        "Zeynep Demir",
-        3,
-        "a, b",
-      ],
-      ["Veli Can", YENI_TCKN, "Beşiktaş", "", "", "", ""]
-    )
-    expect(ltd).toMatchObject({
-      satir: 2,
-      durum: "aktarilacak",
-      mesajlar: [],
-      veri: {
-        tur: "LTD",
-        vkn: YENI_VKN,
-        telefon: "05321112233",
-        sorumluPersonelId: "p_3",
-        calisanSayisi: 3,
-        sgkIsyeriVar: true,
-        defterTuru: "BILANCO",
-        kdvMukellefi: true,
-        etiketler: ["a", "b"],
-      },
-    })
-    expect(sahis!.veri).toMatchObject({
-      tur: "SAHIS",
-      tckn: YENI_TCKN,
-      defterTuru: "ISLETME",
-      sorumluPersonelId: "p_1",
-      sgkIsyeriVar: false,
-    })
-  })
-
-  it("kayıtlı ve dosyada tekrar eden kimlik atlanır; zorunlu alanı eksik satır hatalıdır", () => {
-    const sonuc = oku(
-      ["Çınar", "0174520662", "Kadıköy"],
-      ["Yeni", YENI_VKN, "Kadıköy"],
-      ["Yeni tekrar", YENI_VKN, "Kadıköy"],
-      ["Bozuk", "123", ""]
-    )
-    expect(sonuc.map((s) => s.durum)).toEqual([
-      "atlanacak",
-      "aktarilacak",
-      "atlanacak",
-      "hatali",
-    ])
-    expect(sonuc[0]!.mesajlar[0]).toMatch(/Zaten kayıtlı: Çınar Yazılım/)
-    expect(sonuc[2]!.mesajlar).toEqual(["Dosyada tekrar (satır 3)"])
-    expect(sonuc[3]!.mesajlar).toEqual([
-      "Geçersiz VKN/TCKN: 123",
-      "Vergi dairesi boş",
-    ])
-  })
-
-  it("geçersiz isteğe bağlı alan satırı engellemez, boşaltılıp uyarılır", () => {
-    const [s] = oku(["Yeni", YENI_VKN, "Kadıköy", "123", "Bilinmeyen Kişi"])
-    expect(s!.durum).toBe("aktarilacak")
-    expect(s!.veri!.telefon).toBe("")
-    expect(s!.veri!.sorumluPersonelId).toBe("p_1")
-    expect(s!.mesajlar).toEqual([
-      "Telefon geçersiz, boş bırakıldı: 123",
-      "Sorumlu bulunamadı: Bilinmeyen Kişi",
-    ])
   })
 })
 

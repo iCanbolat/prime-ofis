@@ -1,36 +1,27 @@
 /**
  * e-Belge entegratör sözleşmesi — **backend** tarafından uygulanır.
  *
- * Varsayılan ve tek gerçek uygulama **TÜRMOB-Luca e-Entegratör**: büro kontörü Luca'dan alır ve
- * mükelleflerin e-Fatura / e-Arşiv / e-Defter işlerini Luca üzerinden yürütür. Arayüz sağlayıcıdan
- * bağımsız tutulur; başka entegratörle çalışmak zorunda kalan istisna mükellef için ikinci bir
- * adaptör eklenebilir.
+ * Tek uygulama **Luca portalı**: büro kontörü Luca'dan alır, mükelleflerin e-Fatura / e-Arşiv /
+ * e-Defter işleri Luca'da yürür. Uygulama büronun tek Luca kullanıcısıyla portal oturumu açar
+ * (`luca-portal.ts`) ve her mükellefi bu hesaptaki bir firmaya eşler (`lucaFirmaId`). Salt
+ * okunur: ticari kabul / red ve fatura kesme Luca'da yapılır.
  *
- * Frontend entegratörü doğrudan çağırmaz: yalnızca `/api/e-belge/*` uçlarını bilir. Backend her
- * mükellef için bu arayüzün bir örneğini (şifreli saklanan web servis anahtarıyla) kurar,
- * yanıtları aşağıdaki normalize tiplere çevirir ve kendi veritabanına senkronize eder.
- * Geliştirmede MSW handler'ları (`mocks/handlers/e-belge.ts`) aynı arayüzün mock uygulamasını
- * (`mocks/entegrator/mock-adapter.ts`) kullanır; gerçek backend geldiğinde frontend değişmez.
- *
- * Kurallar:
- * - Anahtar yalnızca backend'de (KMS ile şifreli) tutulur; istemciye hiçbir yanıtta dönmez.
- * - Luca web servis dokümanı herkese açık değildir; uç noktalar ve alan adları Luca'dan alınan
- *   dokümana göre eşlenir. Buradaki tipler uygulamanın ihtiyaç duyduğu normalize görünümdür.
+ * Frontend entegratörü doğrudan çağırmaz: yalnızca `/api/e-belge/*` ve `/api/luca-hesap` uçlarını
+ * bilir. Backend yanıtları aşağıdaki normalize tiplere çevirir ve kendi veritabanına senkronize
+ * eder. Geliştirmede MSW handler'ları aynı davranışı mock portalla taklit eder.
  */
 import type {
   BeratDurumu,
   EBelge,
   EBelgeTur,
   EBelgeYon,
-  EntegratorOrtam,
 } from "../types/domain"
 import type { EBelgeKalem } from "../types/api"
 
 export interface EntegratorKimlik {
   mukellefId: string
-  /** Yalnızca backend'de çözülür */
-  apiAnahtari: string
-  ortam: EntegratorOrtam
+  /** Büro Luca hesabındaki firma */
+  lucaFirmaId?: string
 }
 
 export interface BaglantiDogrulamaSonucu {
@@ -93,13 +84,6 @@ export interface EntegratorAdapter {
     ettn: string,
     format: "PDF" | "XML"
   ): Promise<string>
-  /** Gelen ticari faturaya uygulama yanıtı (kabul / red). */
-  ticariYanitGonder(
-    kimlik: EntegratorKimlik,
-    ettn: string,
-    karar: "KABUL" | "RED",
-    neden?: string
-  ): Promise<void>
   /** e-Defter berat durumları */
   beratDurumlari(
     kimlik: EntegratorKimlik,

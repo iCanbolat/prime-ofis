@@ -55,8 +55,13 @@ export const envSchema = z
     WHATSAPP_APP_SECRET: z.string().min(1).optional(),
     /** Meta webhook abonelik doğrulaması (`hub.verify_token`) */
     WHATSAPP_VERIFY_TOKEN: z.string().min(1).optional(),
-    /** e-Belge entegratörü; Luca uygulaması doküman gelene kadar iskelet */
-    ENTEGRATOR: z.enum(["mock", "luca"]).default("mock"),
+    /**
+     * e-Belge Luca portalı (büronun Luca kullanıcısıyla oturum; CAPTCHA'yı personel girer):
+     * `mock` geliştirme / test taklidi, `http` gerçek portal (Aşama B)
+     */
+    LUCA_PORTAL: z.enum(["mock", "http"]).default("mock"),
+    /** Gerçek portala ardışık iki istek arasındaki en kısa süre (ms) */
+    LUCA_ISTEK_ARALIGI_MS: z.coerce.number().int().min(0).default(1500),
 
     CLAUDE_API_KEY: z.string().optional(),
     CLAUDE_MODEL: z.string().optional(),

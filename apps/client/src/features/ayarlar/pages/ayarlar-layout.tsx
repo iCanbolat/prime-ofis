@@ -12,6 +12,7 @@ const TABS: { to: string; label: string; roles?: Rol[]; dev?: true }[] = [
   { to: "sablonlar", label: "Mesaj Şablonları", roles: ["YONETICI"] },
   { to: "kanallar", label: "Kanallar", roles: ["YONETICI"] },
   { to: "luca", label: "Luca Aktarımı", roles: ["YONETICI"] },
+  { to: "luca-hesap", label: "Luca Hesabı", roles: ["YONETICI"] },
   { to: "bildirimler", label: "Bildirimlerim" },
   { to: "gonderimler", label: "Gönderim Geçmişi", roles: ["YONETICI"] },
   { to: "gelistirici", label: "Geliştirici", dev: true },

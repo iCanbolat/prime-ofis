@@ -14,7 +14,6 @@ import type { FastifyRequest } from "fastify"
 
 import type {
   BaglantiKaydetRequest,
-  EFaturaYanitRequest,
   KontorAlimRequest,
   SenkronRequest,
 } from "@prime/shared/types/api"
@@ -75,12 +74,6 @@ export class EBelgeController {
   @Get("faturalar/:id/icerik")
   icerik(@Req() req: FastifyRequest, @Aktor() aktor: Personel, @Param("id") id: string) {
     return this.ebelge.icerik(req, aktor, id)
-  }
-
-  @Post("faturalar/:id/yanit")
-  @HttpCode(200)
-  yanit(@Aktor() aktor: Personel, @Param("id") id: string, @Body() body: EFaturaYanitRequest) {
-    return this.ebelge.yanit(aktor, id, body ?? ({} as EFaturaYanitRequest))
   }
 
   @Post("faturalar/:id/arsive-kaydet")

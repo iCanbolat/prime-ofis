@@ -10,7 +10,6 @@ import type {
   AcilisTopluRequest,
   CredentialTopluRequest,
   MizanIceAktarRequest,
-  MukellefTopluRequest,
   TahakkukIceAktarRequest,
 } from "@prime/shared/types/api"
 
@@ -76,11 +75,11 @@ export function useMizanAktar() {
 }
 
 /**
- * Hızlı başlangıç aktarımları mükellef, kasa, takvim, tahsilat ve gösterge panelini birlikte
+ * Hızlı başlangıç aktarımları kasa, takvim, tahsilat ve gösterge panelini birlikte
  * etkiler; seyrek yapıldığı için tüm önbellek tazelenir.
  */
 function useTopluAktarim<T>(
-  mutationFn: (body: T) => ReturnType<typeof iceAktarimApi.mukellefToplu>
+  mutationFn: (body: T) => ReturnType<typeof iceAktarimApi.sifreToplu>
 ) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -88,11 +87,6 @@ function useTopluAktarim<T>(
     onSuccess: () => queryClient.invalidateQueries(),
   })
 }
-
-export const useMukellefTopluAktar = () =>
-  useTopluAktarim((body: MukellefTopluRequest) =>
-    iceAktarimApi.mukellefToplu(body)
-  )
 
 export const useSifreTopluAktar = () =>
   useTopluAktarim(async (body: CredentialTopluRequest) => {
